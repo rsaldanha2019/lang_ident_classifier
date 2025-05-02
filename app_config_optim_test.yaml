@@ -1,0 +1,43 @@
+app:
+  model_config_name:
+    "lang_ident_classifier_optim_test"
+  data_dir:
+    "data"
+  logs_dir:
+    "logs"
+  pretrained_embeddings_dir:
+    "pretrained_embeddings"
+  checkpoints_dir:
+    "checkpoints"
+  random_seed:
+    20 
+  num_trials:
+    500 
+logs:
+  prefix:
+    '%Y%m%d'
+  suffix:
+    'lang_ident_classifier_app.log'
+  message_format:
+    '[%(asctime)s GMT] %(levelname)s::%(funcName)s() %(message)s'
+dataset:
+  train_dataset_sample_share:
+    0.01
+  val_dataset_sample_share:
+    0.01
+  files_have_header:
+    True
+  train:
+    data_dir:
+      "train"
+  val:
+    data_dir:
+      "val"
+  test:
+    data_dir:
+      "test"
+model:
+  finetune_status:
+    False
+  max_epochs:
+    5 
