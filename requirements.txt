@@ -3,7 +3,9 @@ huggingface_hub==0.27.1
 langcodes==3.4.0
 lightning==2.1.4
 numpy==1.23.0
-optuna[distributed]==3.6.1
+optuna==3.6.1
+optuna-distributed==0.7.0
+optuna-integration==4.3.0
 pandarallel==1.6.5
 pandas==2.0.3
 peft==0.4.0
@@ -11,6 +13,8 @@ prettytable==3.16.0
 psutil==7.0.0
 py_cpuinfo==9.0.0
 PyYAML==6.0.2
+rapidfuzz==3.13.0
+sentencepiece==0.2.0
 scikit_learn==1.6.1
 torch==2.3.0
 torchmetrics==1.2.1
