@@ -82,6 +82,10 @@ def main():
     # Generate a run timestamp for trial
     run_timestamp = time.strftime("%Y-%m-%d_%H-%M-%S", time.gmtime())
 
+    # If Docker is available, and user hasn't passed docker_image, prompt for it
+    if is_docker_available() and not args.docker_image:
+        args.docker_image = input("Enter the Docker image (e.g., smallworld2020/lang_classifier:v3): ")
+
     # Run the trials
     for i in range(1, args.num_trials + 1):
         time.sleep(5)  # Interval between trials
