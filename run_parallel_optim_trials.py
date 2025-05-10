@@ -55,9 +55,9 @@ def main():
     parser = argparse.ArgumentParser(description="Run parallel optimization trials.")
     
     # Adding arguments
-    parser.add_argument('--script_path', type=str, help='Path to the script to run (e.g., ./standalone_job_optim_test.sh)')
-    parser.add_argument('--num_trials', type=int, help='Number of trials to run')
-    parser.add_argument('--gpu_ids', type=str, help="GPU IDs to use (e.g., '0,1' or 'all')")
+    parser.add_argument('--script_path', type=str, required=True, help='Path to the script to run (e.g., ./standalone_job_optim_test.sh)')
+    parser.add_argument('--num_trials', type=int, required=True, help='Number of trials to run')
+    parser.add_argument('--gpu_ids', type=str, required=True, help="GPU IDs to use (e.g., '0,1' or 'all')")
     if is_docker_available():
         parser.add_argument('--docker_image', type=str, help="Docker image to use (optional)", default=None)
     
@@ -89,10 +89,11 @@ def main():
     # Run the trials
     for i in range(1, args.num_trials + 1):
         time.sleep(5)  # Interval between trials
-        if is_docker_available():
+        if is_docker_available() and args.docker_image:
             run_trial(i, args.script_path, args.gpu_ids, run_timestamp, args.docker_image)
         else:
             run_trial(i, args.script_path, args.gpu_ids, run_timestamp, None)
+
     print("All trials completed!")
 
 if __name__ == "__main__":
