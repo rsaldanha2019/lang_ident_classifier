@@ -3,6 +3,7 @@ import shutil
 import subprocess
 import time
 import os
+import socket
 
 def is_docker_available():
     """Check if Docker is available on the system"""
@@ -24,6 +25,15 @@ def is_conda_available():
     except subprocess.CalledProcessError:
         return False
 
+def find_free_port(start_port=8000, end_port=35000):
+    """Find a free port between the specified range."""
+    for port in range(start_port, end_port + 1):
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+            result = s.connect_ex(('localhost', port))
+            if result != 0:  # Port is free
+                return port
+    raise Exception("Could not find a free MASTER_PORT.")
+
 def run_job(config_file_path, docker_image='', gpu_ids='all', run_timestamp=''):
     # Check if run_timestamp is provided
     if not run_timestamp:
@@ -40,16 +50,8 @@ def run_job(config_file_path, docker_image='', gpu_ids='all', run_timestamp=''):
     job_log_dir = os.path.join(workdir, 'standalone_job_log', job_name)
     os.makedirs(job_log_dir, exist_ok=True)
 
-    # Find free MASTER_PORT
-    master_port = None
-    for port in range(8000, 35001):
-        result = subprocess.run(['nc', '-z', 'localhost', str(port)], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-        if result.returncode != 0:
-            master_port = port
-            break
-
-    if master_port is None:
-        raise Exception("Could not find a free MASTER_PORT.")
+    # Find free MASTER_PORT using Python's socket library
+    master_port = find_free_port()
 
     # Derive PPN and GPU flag
     if gpu_ids == 'all':
@@ -95,7 +97,7 @@ def run_trial(trial_num, config_file_path, gpu_ids, run_timestamp, docker_image=
     if docker_image and is_docker_available():
         print(f"Running trial {trial_num} with Docker...")
         try:
-            run_job(config_file_path=config_file_path, docker_image=docker_image, gpu_ids=gpu_ids, run_timestamp=run_timestamp,)
+            run_job(config_file_path=config_file_path, docker_image=docker_image, gpu_ids=gpu_ids, run_timestamp=run_timestamp)
         except subprocess.CalledProcessError as e:
             print(f"Error during trial {trial_num} execution: {e}")
     elif is_conda_available():
