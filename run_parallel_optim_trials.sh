@@ -1,89 +1,88 @@
 #!/bin/bash
 
-# Interval between trials (in seconds)
-interval_between_trials=30
+set -e
 
-# Prompt the user for the path to the script
-read -p "Enter the path to the script (e.g., ./standalone_job_optim_test.sh): " SCRIPT_PATH
+# Default values
+gpu_ids="all"
+docker_image=""
+run_timestamp=""
 
-# Check if the script exists and is executable
-if [ ! -x "$SCRIPT_PATH" ]; then
-  echo "The specified script does not exist or is not executable."
-  exit 1
-fi
+# Debugging: print all arguments
+echo "Arguments received: $@"
 
-# Prompt the user for the number of parallel trials
-read -p "Enter the number of parallel trials (1 to n): " num_trials
-
-# Trim whitespace from input
-num_trials=$(echo "$num_trials" | xargs) # Trim leading/trailing whitespace
-
-# Debug output to check the value of num_trials and its length
-echo "num_trials is '$num_trials'"
-
-# Convert to integer and validate
-if [[ "$num_trials" =~ ^[0-9]+$ ]]; then
-  if [ "$num_trials" -lt 1 ]; then
-    echo "Invalid input. Please enter a positive integer greater than 0."
-    exit 1
-  fi
-else
-  echo "Invalid input. Please enter a positive integer greater than 0."
-  exit 1
-fi
-
-# Prompt for GPU IDs
-read -p "Enter the GPU IDs (e.g., 0,1 for multiple GPUs or 'all' for all GPUs): " gpu_ids
-
-# Validate GPU IDs (ensure it's a valid format)
-if [[ "$gpu_ids" != "all" && ! "$gpu_ids" =~ ^[0-9]+(,[0-9]+)*$ ]]; then
-  echo "Invalid GPU IDs. Please provide a comma-separated list (e.g., 0,1 or 'all')."
-  exit 1
-fi
-
-# Generate a run timestamp in seconds with float precision
-run_timestamp=$(date +%s.%N)
-
-# Check if Docker is available
-if command -v docker &>/dev/null; then
-  # Ask for Docker image if Docker is available
-  read -p "Enter the Docker image (e.g., smallworld2020/lang_classifier:v3): " docker_image
-else
-  # Skip Docker image prompt if Docker isn't available
-  docker_image=""
-fi
-
-# Run the specified number of parallel trials with the same timestamp in the background
-for i in $(seq 1 "$num_trials"); do
-  sleep "$interval_between_trials"
-  
-  # Check if Docker is available
-  if [[ -n "$docker_image" ]]; then
-    # Running in Docker if docker_image is set
-    echo "Running trial $i with Docker..."
-    docker run --rm --runtime=nvidia --gpus "$gpu_ids" \
-      -v "$(pwd)":"$(pwd)" \
-      -w "/app" \
-      --ipc=host \
-      "$docker_image" \
-      "$SCRIPT_PATH" --gpu-ids="$gpu_ids" --run_timestamp="$run_timestamp" &
-  elif command -v conda &>/dev/null; then
-    # Running in Conda if Docker isn't available
-    echo "Running trial $i with Conda..."
-    conda run -n lang_ident_classifier python "$SCRIPT_PATH" --gpu-ids="$gpu_ids" --run_timestamp="$run_timestamp" &
-  else
-    echo "Error: Neither Docker nor Conda was found on your system."
-    exit 1
-  fi
-  
-  echo "Started trial $i with timestamp $run_timestamp. Background PID: $!"
-
+# Parse arguments
+for arg in "$@"; do
+  case $arg in
+    --docker_image=*)
+      docker_image="${arg#*=}"
+      ;;
+    --gpu_ids=*)
+      gpu_ids="${arg#*=}"
+      ;;
+    --run_timestamp=*)
+      run_timestamp="${arg#*=}"
+      ;;
+    *)
+      echo "Unknown option: $arg"
+      echo "Usage: $0 [--docker_image=\"<image>\"] [--gpu_ids=\"<gpu_ids>\"] --run_timestamp=\"<timestamp>\""
+      exit 1
+      ;;
+  esac
 done
 
-# Wait for all background processes to finish before exiting
-wait
+# Check if run_timestamp is set
+if [ -z "$run_timestamp" ]; then
+  echo "Error: --run_timestamp is required."
+  exit 1
+fi
 
-# Exit the script after all trials are completed
-echo "All trials have finished."
-exit 0
+# CPU thread settings
+total_cores=$(nproc)
+num_threads=$(echo "($total_cores * 0.2)/1" | bc)
+if [ "$num_threads" -lt 1 ]; then num_threads=1; fi
+export OMP_NUM_THREADS=$num_threads
+
+# Paths
+WORKDIR=$(pwd)
+JOB_NAME=lang_ident_classifier_optim_test
+JOB_LOG_DIR="$WORKDIR/standalone_job_log/$JOB_NAME"
+mkdir -p "$JOB_LOG_DIR"
+
+# Find free MASTER_PORT
+MASTER_PORT=$(for port in $(seq 8000 35000); do nc -z localhost "$port" 2>/dev/null || { echo "$port"; break; }; done)
+
+# Derive PPN
+if [[ "$gpu_ids" == "all" ]]; then
+  gpu_flag="all"
+  PPN=$(nvidia-smi -L | wc -l)
+else
+  gpu_flag="\"device=$gpu_ids\""
+  PPN=$(echo "$gpu_ids" | tr ',' '\n' | wc -l)
+fi
+
+# If docker_image is set, try to run with Docker
+if [ -n "$docker_image" ]; then
+  # Run docker
+  echo "Running with Docker..."
+  docker run --rm --runtime=nvidia --gpus "$gpu_flag" \
+    -v "$WORKDIR":"$WORKDIR" \
+    -w "/app" \
+    --ipc=host \
+    "$docker_image" \
+    run-hyperparam \
+      --config=app_config_optim_test.yaml \
+      --backend=nccl \
+      --run_timestamp "$run_timestamp" \
+      >> "$JOB_LOG_DIR/RUN_$run_timestamp.out" 2>&1
+else
+  # If Docker is not used, attempt to run using Conda (if available)
+  if command -v conda >/dev/null 2>&1; then
+    echo "Docker not found, running with Conda..."
+    conda run -n lang_ident_classifier bash "$WORKDIR/lang_ident_classifier/standalone_job_optim_test.sh" \
+      --gpu_ids "$gpu_ids" --run_timestamp "$run_timestamp"
+  else
+    echo "Error: Docker and Conda are both unavailable. Cannot proceed."
+    exit 1
+  fi
+fi
 
