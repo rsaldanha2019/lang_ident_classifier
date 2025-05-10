@@ -110,9 +110,11 @@ def run_job(config_file_path, docker_image='', gpu_ids='all', run_timestamp=''):
         
         # Ensure Conda environment is activated, then run the job
         conda_command = [
-            'conda', 'run', '-n', 'lang_ident_classifier', 'python', '-m', 'lang_ident_classifier.cli.hyperparam_selection_model_optim',
-            '--config', config_file_path,
-            '--backend', 'nccl', '--run_timestamp', run_timestamp
+            'conda', 'run', '-n', 'lang_ident_classifier',
+            'bash', '-c', f'export PYTHONPATH=$(conda run -n lang_ident_classifier python -c "import sys; print(sys.prefix)")/lib/python3.10/site-packages && '
+                        f'torchrun --nproc-per-node {ppn} --master-port {master_port} '
+                        f'run-hyperparam --config {config_file_path} '
+                        f'--backend nccl --run_timestamp {run_timestamp}'
         ]
 
         # Ensure the command is printed for debugging
