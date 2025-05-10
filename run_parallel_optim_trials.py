@@ -35,7 +35,7 @@ def run_trial(trial_num, script_path, gpu_ids, run_timestamp, docker_image=None)
                 "docker", "run", "--rm", "--runtime=nvidia", "--gpus", gpu_ids,
                 "-v", f"{script_path}:{script_path}",
                 "-w", "/app", "--ipc=host", docker_image,
-                "bash", script_path, "--gpu-ids", gpu_ids, "--run_timestamp", run_timestamp
+                "bash", script_path, "--gpu_ids", gpu_ids, "--run_timestamp", run_timestamp
             ], check=True)
         except subprocess.CalledProcessError as e:
             print(f"Error during trial {trial_num} execution: {e}")
@@ -44,7 +44,7 @@ def run_trial(trial_num, script_path, gpu_ids, run_timestamp, docker_image=None)
         try:
             subprocess.run([
                 "conda", "run", "-n", "lang_ident_classifier", "bash", script_path,
-                "--gpu-ids", gpu_ids, "--run_timestamp", run_timestamp
+                "--gpu_ids", gpu_ids, "--run_timestamp", run_timestamp
             ], check=True)
         except subprocess.CalledProcessError as e:
             print(f"Error during trial {trial_num} execution: {e}")
