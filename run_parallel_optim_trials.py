@@ -1,15 +1,14 @@
 import subprocess
 import time
 
-
 def get_user_input(prompt):
-    """Helper function to get user input without any default value."""
+    """Helper function to get user input using input()"""
     user_input = input(f"{prompt}: ")
     return user_input
 
 
 def is_docker_available():
-    """Check if Docker is available on the system."""
+    """Check if Docker is available on the system"""
     try:
         subprocess.run(["docker", "version"], stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=True)
         return True
@@ -20,7 +19,7 @@ def is_docker_available():
 
 
 def is_conda_available():
-    """Check if Conda is available on the system."""
+    """Check if Conda is available on the system"""
     try:
         subprocess.run(["conda", "--version"], stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=True)
         return True
@@ -31,7 +30,7 @@ def is_conda_available():
 
 
 def run_trial(trial_num, script_path, gpu_ids, run_timestamp, docker_image=None):
-    """Function to run a trial."""
+    """Function to run a trial"""
     print(f"Running trial {trial_num} with GPU(s) {gpu_ids} and timestamp {run_timestamp}...")
 
     # Check if Docker is available and run accordingly
