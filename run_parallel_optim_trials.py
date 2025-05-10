@@ -63,7 +63,7 @@ def main():
     
     # Parse the arguments
     args = parser.parse_args()
-    
+
     # Validate the number of trials
     if args.num_trials < 1:
         print("Error: The number of trials must be at least 1.")
