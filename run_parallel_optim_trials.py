@@ -94,15 +94,15 @@ def run_job(config_file_path, docker_image='', gpu_ids='all', run_timestamp=''):
         ] + command  # Append the common command for run-hyperparam
         
         # First torchrun execution
-        with open(os.path.join(job_log_dir, f"RUN_{run_timestamp}_1.out"), 'w') as log_file:
+        with open(os.path.join(job_log_dir, f"RUN_{run_timestamp}.out"), 'w') as log_file:
             subprocess.run(docker_command, stdout=log_file, stderr=log_file)
         
         # Wait for 5-10 seconds before the second run
-        time.sleep(random.randint(5, 10))
+        # time.sleep(random.randint(5, 10))
         
         # Second torchrun execution
-        with open(os.path.join(job_log_dir, f"RUN_{run_timestamp}_2.out"), 'w') as log_file:
-            subprocess.run(docker_command, stdout=log_file, stderr=log_file)
+        # with open(os.path.join(job_log_dir, f"RUN_{run_timestamp}_2.out"), 'w') as log_file:
+        #     subprocess.run(docker_command, stdout=log_file, stderr=log_file)
 
     # Mimicking Docker's behavior with Conda
     elif shutil.which('conda'):
@@ -116,17 +116,19 @@ def run_job(config_file_path, docker_image='', gpu_ids='all', run_timestamp=''):
             '--backend', 'nccl', '--run_timestamp', run_timestamp
         ]
 
-        
-        # First torchrun execution
-        with open(os.path.join(job_log_dir, f"RUN_{run_timestamp}_1.out"), 'w') as log_file:
+        # Ensure the command is printed for debugging
+        print(f"Running command: {' '.join(conda_command)}")
+
+        # Execute the command and write output to the log file
+        with open(os.path.join(job_log_dir, f"RUN_{run_timestamp}.out"), 'w') as log_file:
             subprocess.run(conda_command, stdout=log_file, stderr=log_file)
         
-        # Wait for 5-10 seconds before the second run
-        time.sleep(random.randint(5, 10))
+        # # Wait for 5-10 seconds before the second run
+        # time.sleep(random.randint(5, 10))
         
-        # Second torchrun execution
-        with open(os.path.join(job_log_dir, f"RUN_{run_timestamp}_2.out"), 'w') as log_file:
-            subprocess.run(conda_command, stdout=log_file, stderr=log_file)
+        # # Second torchrun execution
+        # with open(os.path.join(job_log_dir, f"RUN_{run_timestamp}_2.out"), 'w') as log_file:
+        #     subprocess.run(conda_command, stdout=log_file, stderr=log_file)
     
     # If neither Docker nor Conda are available
     else:
