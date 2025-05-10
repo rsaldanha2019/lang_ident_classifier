@@ -3,6 +3,7 @@ import time
 import subprocess
 import ipywidgets as widgets
 from IPython.display import display
+import os
 
 def get_user_input(prompt, default=None):
     """Prompt the user for input, using different methods based on the environment."""
@@ -27,11 +28,26 @@ def create_input_widget(prompt, default_value):
 
 def is_docker_available():
     """Check if Docker is available on the system."""
-    return subprocess.run(["command", "-v", "docker"], stdout=subprocess.PIPE, stderr=subprocess.PIPE).returncode == 0
+    try:
+        subprocess.run(["docker", "version"], stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=True)
+        return True
+    except subprocess.CalledProcessError:
+        return False
 
 def is_conda_available():
     """Check if Conda is available on the system."""
-    return subprocess.run(["command", "-v", "conda"], stdout=subprocess.PIPE, stderr=subprocess.PIPE).returncode == 0
+    try:
+        subprocess.run(["conda", "--version"], stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=True)
+        return True
+    except subprocess.CalledProcessError:
+        return False
+
+def validate_gpu_ids(gpu_ids):
+    """Validate the GPU IDs input."""
+    if gpu_ids != "all" and not all(x.isdigit() for x in gpu_ids.split(',')):
+        print("Error: Invalid GPU IDs format. Please provide a comma-separated list (e.g., 0,1 or 'all').")
+        return False
+    return True
 
 def run_trial(script_path, gpu_ids, run_timestamp, docker_image=None):
     """Run a single trial using Docker or Conda."""
@@ -60,8 +76,8 @@ def main():
     if not sys.stdin.isatty():  # Running in non-interactive environment like Kaggle
         script_path = create_input_widget("Enter the path to the script (e.g., ./standalone_job_optim_test.sh)", "./standalone_job_optim_test.sh").value
         gpu_ids = create_input_widget("Enter the GPU IDs (e.g., 0,1 for multiple GPUs or 'all' for all GPUs)", "all").value
-        docker_image = create_input_widget("Enter the Docker image (e.g., smallworld2020/lang_classifier:v3)", "smallworld2020/lang_classifier:v3").value if is_docker_available() else None
-        num_trials = 1  # You can define default trials here
+        docker_image = None  # Skip Docker if it's not available in this environment
+        num_trials = int(create_input_widget("Enter the number of trials", "1").value)
     else:  # Running in terminal, use input() for prompts
         script_path = get_user_input("Enter the path to the script (e.g., ./standalone_job_optim_test.sh)", "./standalone_job_optim_test.sh")
         gpu_ids = get_user_input("Enter the GPU IDs (e.g., 0,1 for multiple GPUs or 'all' for all GPUs)", "all")
@@ -69,8 +85,7 @@ def main():
         num_trials = int(get_user_input("Enter the number of trials", "1"))
 
     # Validate GPU IDs
-    if gpu_ids != "all" and not all(x.isdigit() for x in gpu_ids.split(',')):
-        print("Invalid GPU IDs format. Please provide a comma-separated list (e.g., 0,1 or 'all').")
+    if not validate_gpu_ids(gpu_ids):
         exit(1)
 
     # Generate a run timestamp in seconds with float precision
