@@ -89,7 +89,10 @@ def main():
     # Run the trials
     for i in range(1, args.num_trials + 1):
         time.sleep(5)  # Interval between trials
-        run_trial(i, args.script_path, args.gpu_ids, run_timestamp, args.docker_image)
+        if is_docker_available():
+            run_trial(i, args.script_path, args.gpu_ids, run_timestamp, args.docker_image)
+        else:
+            run_trial(i, args.script_path, args.gpu_ids, run_timestamp, None)
 
     print("All trials completed!")
 
