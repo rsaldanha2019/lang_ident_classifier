@@ -7,6 +7,9 @@ gpu_ids="all"
 docker_image=""
 run_timestamp=""
 
+# Print arguments to check if they are being passed correctly
+echo "Arguments passed: $@"
+
 # Parse arguments
 for arg in "$@"; do
   case $arg in
@@ -32,6 +35,12 @@ done
 
 if [ -z "$run_timestamp" ]; then
   echo "Error: --run_timestamp is required."
+  exit 1
+fi
+
+# Ensure GPU IDs are properly set
+if [ -z "$gpu_ids" ]; then
+  echo "Error: --gpu_ids is required."
   exit 1
 fi
 
