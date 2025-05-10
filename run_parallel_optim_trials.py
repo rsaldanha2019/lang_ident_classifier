@@ -22,7 +22,9 @@ def get_user_input(prompt, default_value=None):
         )
         display(text_widget)
 
-        # Wait for the user to provide input and return the value
+        # Make sure widget is interactive and waits for input from the user
+        while not text_widget.value:
+            time.sleep(0.1)  # Wait for the input to be entered by the user
         return text_widget.value
     else:
         # Use input() for terminal
