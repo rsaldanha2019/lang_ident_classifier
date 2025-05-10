@@ -1,11 +1,18 @@
+import ipywidgets as widgets
+from IPython.display import display
 import subprocess
 import time
 
-def get_user_input(prompt):
-    """Helper function to get user input using input()"""
-    user_input = input(f"{prompt}: ")
-    return user_input
-
+def get_user_input(prompt, default_value=None):
+    """Helper function to create an interactive input widget in Jupyter/Colab/Kaggle"""
+    widget = widgets.Text(
+        value=default_value,
+        placeholder=f'Enter {prompt}',
+        description=prompt,
+        disabled=False
+    )
+    display(widget)
+    return widget
 
 def is_docker_available():
     """Check if Docker is available on the system"""
@@ -59,15 +66,23 @@ def run_trial(trial_num, script_path, gpu_ids, run_timestamp, docker_image=None)
 
 
 def main():
-    # Prompt user for script path
-    script_path = get_user_input("Enter the path to the script (e.g., ./standalone_job_optim_test.sh)")
+    # Prompt user for script path using a widget
+    script_path_widget = get_user_input("Enter the path to the script (e.g., ./standalone_job_optim_test.sh)", "./standalone_job_optim_test.sh")
+    
+    # Wait until the user inputs the script path
+    while not script_path_widget.value:
+        time.sleep(1)  # Wait for input
+
+    script_path = script_path_widget.value
 
     # Prompt user for number of trials
-    num_trials = get_user_input("Enter the number of trials to run")
+    num_trials_widget = get_user_input("Enter the number of trials to run", "1")
     
-    # Ensure that the number of trials is a valid positive integer
+    while not num_trials_widget.value:
+        time.sleep(1)
+
     try:
-        num_trials = int(num_trials)
+        num_trials = int(num_trials_widget.value)
         if num_trials < 1:
             raise ValueError("The number of trials must be at least 1.")
     except ValueError as e:
@@ -75,12 +90,22 @@ def main():
         return
 
     # Prompt user for GPU IDs
-    gpu_ids = get_user_input("Enter the GPU IDs (e.g., 0,1 for multiple GPUs or 'all' for all GPUs)")
+    gpu_ids_widget = get_user_input("Enter the GPU IDs (e.g., 0,1 for multiple GPUs or 'all' for all GPUs)", "all")
+    
+    while not gpu_ids_widget.value:
+        time.sleep(1)
+
+    gpu_ids = gpu_ids_widget.value
 
     # Check if Docker is available
     docker_image = None
     if is_docker_available():
-        docker_image = get_user_input("Enter the Docker image (e.g., smallworld2020/lang_classifier:v3)")
+        docker_image_widget = get_user_input("Enter the Docker image (e.g., smallworld2020/lang_classifier:v3)", "smallworld2020/lang_classifier:v3")
+        
+        while not docker_image_widget.value:
+            time.sleep(1)
+
+        docker_image = docker_image_widget.value
     else:
         print("Docker not available. Will use Conda or fallback to Python environment.")
 
