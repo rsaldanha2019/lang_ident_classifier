@@ -115,6 +115,7 @@ def run_job(config_file_path, docker_image='', gpu_ids='all', run_timestamp=''):
             'run-hyperparam', '--config', config_file_path,
             '--backend', 'nccl', '--run_timestamp', run_timestamp
         ]
+
         
         # First torchrun execution
         with open(os.path.join(job_log_dir, f"RUN_{run_timestamp}_1.out"), 'w') as log_file:
