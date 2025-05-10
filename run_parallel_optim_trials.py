@@ -1,4 +1,5 @@
 import argparse
+import shutil
 import subprocess
 import time
 import os
@@ -23,7 +24,70 @@ def is_conda_available():
     except subprocess.CalledProcessError:
         return False
 
-def run_trial(trial_num, script_path, gpu_ids, run_timestamp, docker_image=None):
+def run_job(config_file_path, docker_image='', gpu_ids='all', run_timestamp=''):
+    # Check if run_timestamp is provided
+    if not run_timestamp:
+        raise ValueError("Error: --run_timestamp is required.")
+
+    # CPU thread settings
+    total_cores = os.cpu_count()
+    num_threads = max(1, int(total_cores * 0.2))  # Calculate number of threads as 20% of total cores
+    os.environ['OMP_NUM_THREADS'] = str(num_threads)
+
+    # Paths
+    workdir = os.getcwd()
+    job_name = 'lang_ident_classifier_optim_test'
+    job_log_dir = os.path.join(workdir, 'standalone_job_log', job_name)
+    os.makedirs(job_log_dir, exist_ok=True)
+
+    # Find free MASTER_PORT
+    master_port = None
+    for port in range(8000, 35001):
+        result = subprocess.run(['nc', '-z', 'localhost', str(port)], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        if result.returncode != 0:
+            master_port = port
+            break
+
+    if master_port is None:
+        raise Exception("Could not find a free MASTER_PORT.")
+
+    # Derive PPN and GPU flag
+    if gpu_ids == 'all':
+        gpu_flag = 'all'
+        ppn = len(subprocess.run(['nvidia-smi', '-L'], stdout=subprocess.PIPE, stderr=subprocess.PIPE).stdout.splitlines())
+    else:
+        gpu_flag = f"\"device={gpu_ids}\""
+        ppn = len(gpu_ids.split(','))
+
+    # Running with Docker
+    if docker_image:
+        print("Running with Docker...")
+        command = [
+            'docker', 'run', '--rm', '--runtime=nvidia', '--gpus', gpu_flag,
+            '-v', f"{workdir}:{workdir}", '-w', '/app', '--ipc=host', docker_image,
+            'run-hyperparam', f'--config={config_file_path}',
+            '--backend=nccl', '--run_timestamp', run_timestamp
+        ]
+        with open(os.path.join(job_log_dir, f"RUN_{run_timestamp}.out"), 'w') as log_file:
+            subprocess.run(command, stdout=log_file, stderr=log_file)
+
+    # Mimicking Docker's behavior with Conda
+    elif shutil.which('conda'):
+        print("Docker not found, mimicking Docker behavior with Conda...")
+        command = [
+            'conda', 'run', '-n', 'lang_ident_classifier', 'bash', 
+            '-c', f"cd {workdir} && "
+                  f"run-hyperparam --config={config_file_path} "
+                  f"--backend=nccl --run_timestamp {run_timestamp}"
+        ]
+        with open(os.path.join(job_log_dir, f"RUN_{run_timestamp}.out"), 'w') as log_file:
+            subprocess.run(command, stdout=log_file, stderr=log_file)
+    
+    # If neither Docker nor Conda are available
+    else:
+        raise EnvironmentError("Error: Docker and Conda are both unavailable. Cannot proceed.")
+
+def run_trial(trial_num, config_file_path, gpu_ids, run_timestamp, docker_image=None):
     """Function to run a trial"""
     print(f"Running trial {trial_num} with GPU(s) {gpu_ids} and timestamp {run_timestamp}...")
 
@@ -31,24 +95,14 @@ def run_trial(trial_num, script_path, gpu_ids, run_timestamp, docker_image=None)
     if docker_image and is_docker_available():
         print(f"Running trial {trial_num} with Docker...")
         try:
-            subprocess.run([
-                "docker", "run", "--rm", "--runtime=nvidia", "--gpus", gpu_ids,
-                "-v", f"{script_path}:{script_path}",
-                "-w", "/app", "--ipc=host", docker_image,
-                "bash", script_path, "--gpu_ids", gpu_ids, "--run_timestamp", run_timestamp
-            ], check=True)
+            run_job(config_file_path=config_file_path, docker_image=docker_image, gpu_ids=gpu_ids, run_timestamp=run_timestamp,)
         except subprocess.CalledProcessError as e:
             print(f"Error during trial {trial_num} execution: {e}")
     elif is_conda_available():
         print(f"Running trial {trial_num} with Conda...")
         try:
             # Directly run the bash script via Conda with the necessary arguments
-            command = [
-                "conda", "run", "-n", "lang_ident_classifier", "bash", script_path,
-                "--gpu_ids", gpu_ids, "--run_timestamp", run_timestamp
-            ]
-            print(f"Running command: {' '.join(command)}")  # Print command for debugging
-            subprocess.run(command, check=True)
+            run_job(config_file_path=config_file_path, docker_image=None, gpu_ids=gpu_ids, run_timestamp=run_timestamp)
         except subprocess.CalledProcessError as e:
             print(f"Error during trial {trial_num} execution: {e}")
     else:
@@ -58,7 +112,7 @@ def main():
     parser = argparse.ArgumentParser(description="Run parallel optimization trials.")
     
     # Adding arguments
-    parser.add_argument('--script_path', type=str, help='Path to the script to run (e.g., ./standalone_job_optim_test.sh)')
+    parser.add_argument('--config_file_path', type=str, help='Path to the config yaml to run (e.g., ./app_config.yaml)')
     parser.add_argument('--num_trials', type=int, help='Number of trials to run')
     parser.add_argument('--gpu_ids', type=str, help="GPU IDs to use (e.g., '0,1' or 'all')")
     if is_docker_available():
@@ -93,9 +147,9 @@ def main():
     for i in range(1, args.num_trials + 1):
         time.sleep(5)  # Interval between trials
         if is_docker_available():
-            run_trial(i, args.script_path, args.gpu_ids, run_timestamp, args.docker_image)
+            run_trial(i, args.config_file_path, args.gpu_ids, run_timestamp, args.docker_image)
         else:
-            run_trial(i, args.script_path, args.gpu_ids, run_timestamp, None)
+            run_trial(i, args.config_file_path, args.gpu_ids, run_timestamp, None)
     print("All trials completed!")
 
 if __name__ == "__main__":
