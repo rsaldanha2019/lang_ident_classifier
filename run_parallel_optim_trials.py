@@ -132,8 +132,8 @@ def main():
         return
 
     # Check if the script exists and is executable
-    if not os.path.exists(args.script_path):
-        print(f"Error: The specified script does not exist: {args.script_path}")
+    if not os.path.exists(args.config_file_path):
+        print(f"Error: The specified file does not exist: {args.config_file_path}")
         return
 
     # Generate a run timestamp for trial
