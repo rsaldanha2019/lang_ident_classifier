@@ -110,9 +110,8 @@ def run_job(config_file_path, docker_image='', gpu_ids='all', run_timestamp=''):
         
         # Ensure Conda environment is activated, then run the job
         conda_command = [
-            'conda', 'run', '-n', 'lang_ident_classifier', 
-            'torchrun', '--nproc-per-node', str(ppn), '--master-port', str(master_port),
-            'run-hyperparam', '--config', config_file_path,
+            'conda', 'run', '-n', 'lang_ident_classifier', 'python', '-m', 'lang_ident_classifier.cli.hyperparam_selection_model_optim',
+            '--config', config_file_path,
             '--backend', 'nccl', '--run_timestamp', run_timestamp
         ]
 
