@@ -5,6 +5,7 @@ import time
 import os
 import socket
 import yaml
+import random
 
 def is_docker_available():
     """Check if Docker is available on the system"""
@@ -86,21 +87,39 @@ def run_job(config_file_path, docker_image='', gpu_ids='all', run_timestamp=''):
             'torchrun', '--nproc-per-node', str(ppn), '--master-port', str(master_port),
         ] + command  # Append the common command for run-hyperparam
         
-        with open(os.path.join(job_log_dir, f"RUN_{run_timestamp}.out"), 'w') as log_file:
+        # First torchrun execution
+        with open(os.path.join(job_log_dir, f"RUN_{run_timestamp}_1.out"), 'w') as log_file:
+            subprocess.run(docker_command, stdout=log_file, stderr=log_file)
+        
+        # Wait for 5-10 seconds before the second run
+        time.sleep(random.randint(5, 10))
+        
+        # Second torchrun execution
+        with open(os.path.join(job_log_dir, f"RUN_{run_timestamp}_2.out"), 'w') as log_file:
             subprocess.run(docker_command, stdout=log_file, stderr=log_file)
 
     # Mimicking Docker's behavior with Conda
     elif shutil.which('conda'):
         print(f"Docker not found, mimicking Docker behavior with Conda for job '{job_name}' using GPUs {gpu_ids}...")
+        
+        # Ensure Conda environment is activated, then run the job
         conda_command = [
-            'conda', 'run', '-n', 'lang_ident_classifier', 'bash', 
-            '-c', f"cd {workdir} && "
-                  f"torchrun --nproc-per-node {ppn} --master-port {master_port} "
-                  f"run-hyperparam --config={config_file_path} "
-                  f"--backend=nccl --run_timestamp {run_timestamp}"
+            'conda', 'run', '-n', 'lang_ident_classifier', 'bash', '-c',
+            f"source activate lang_ident_classifier && "
+            f"torchrun --nproc-per-node {ppn} --master-port {master_port} "
+            f"run-hyperparam --config={config_file_path} "
+            f"--backend=nccl --run_timestamp {run_timestamp}"
         ]
         
-        with open(os.path.join(job_log_dir, f"RUN_{run_timestamp}.out"), 'w') as log_file:
+        # First torchrun execution
+        with open(os.path.join(job_log_dir, f"RUN_{run_timestamp}_1.out"), 'w') as log_file:
+            subprocess.run(conda_command, stdout=log_file, stderr=log_file)
+        
+        # Wait for 5-10 seconds before the second run
+        time.sleep(random.randint(5, 10))
+        
+        # Second torchrun execution
+        with open(os.path.join(job_log_dir, f"RUN_{run_timestamp}_2.out"), 'w') as log_file:
             subprocess.run(conda_command, stdout=log_file, stderr=log_file)
     
     # If neither Docker nor Conda are available
@@ -165,12 +184,10 @@ def main():
     # Run the trials
     for i in range(1, args.num_trials + 1):
         time.sleep(5)  # Interval between trials
-        print(f"Starting trial {i}...")
         if is_docker_available():
             run_trial(i, args.config_file_path, args.gpu_ids, run_timestamp, args.docker_image)
         else:
             run_trial(i, args.config_file_path, args.gpu_ids, run_timestamp, None)
-
     print("All trials completed!")
 
 if __name__ == "__main__":
