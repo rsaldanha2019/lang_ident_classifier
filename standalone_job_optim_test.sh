@@ -10,11 +10,11 @@ run_timestamp=""
 # Parse arguments
 for arg in "$@"; do
   case $arg in
-    --docker-image=*)
+    --docker_image=*)
       docker_image="${arg#*=}"
       shift
       ;;
-    --gpu-ids=*)
+    --gpu_ids=*)
       gpu_ids="${arg#*=}"
       shift
       ;;
@@ -24,7 +24,7 @@ for arg in "$@"; do
       ;;
     *)
       echo "Unknown option: $arg"
-      echo "Usage: $0 --docker-image=\"<image>\" [--gpu-ids=\"<gpu_ids>\"] [--run_timestamp=\"<timestamp>\"]"
+      echo "Usage: $0 --docker_image=\"<image>\" [--gpu_ids=\"<gpu_ids>\"] [--run_timestamp=\"<timestamp>\"]"
       exit 1
       ;;
   esac
@@ -64,32 +64,17 @@ else
   PPN=$(echo "$gpu_ids" | tr ',' '\n' | wc -l)
 fi
 
-# Check if Docker is available
-if command -v docker &>/dev/null; then
-  # Run docker if available
-  echo "Running experiment in Docker..."
-  docker run --rm --runtime=nvidia --gpus "$gpu_flag" \
-    -v "$WORKDIR":"$WORKDIR" \
-    -w "/app" \
-    --ipc=host \
-    "$docker_image" \
-    run-hyperparam \
-      --config=app_config_optim_test.yaml \
-      --backend=nccl \
-      --run_timestamp "$run_timestamp" \
-      >> "$JOB_LOG_DIR/RUN_$run_timestamp.out" 2>&1
-else
-  # Run in Conda environment if Docker isn't available
-  echo "Docker not found. Running experiment with Conda..."
-  if command -v conda &>/dev/null; then
-    conda run -n lang_ident_classifier python -m lang_ident_classifier.cli.hyperparam_selection_model_optim \
-      --config=app_config_optim_test.yaml \
-      --backend=nccl \
-      --run_timestamp "$run_timestamp" \
-      >> "$JOB_LOG_DIR/RUN_$run_timestamp.out" 2>&1
-  else
-    echo "Error: Neither Docker nor Conda was found on your system."
-    exit 1
-  fi
-fi
+# Run docker
+docker run --rm --runtime=nvidia --gpus "$gpu_flag" \
+  -v "$WORKDIR":"$WORKDIR" \
+  -w "/app" \
+  --ipc=host \
+  "$docker_image" \
+  run-hyperparam \
+    --config=app_config_optim_test.yaml \
+    --backend=nccl \
+    --run_timestamp "$run_timestamp" \
+    >> "$JOB_LOG_DIR/RUN_$run_timestamp.out" 2>&1
+
+
 
