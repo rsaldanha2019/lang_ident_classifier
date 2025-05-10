@@ -38,11 +38,8 @@ def find_free_port(start_port=8000, end_port=35000):
     raise Exception("Could not find a free MASTER_PORT.")
 
 def get_job_name_from_yaml(config_file_path):
-    """Get the job name from the YAML file"""
-    with open(config_file_path, 'r') as file:
-        config = yaml.safe_load(file)
-        # Assuming the YAML file has a 'job_name' field (adjust as per your YAML structure)
-        job_name = config.get('job_name', 'default_job_name')  # Default name if not present
+    """Get the job name from the YAML file or use the filename if not available."""
+    job_name = os.path.splitext(os.path.basename(config_file_path))[0]
     return job_name
 
 def get_current_timestamp():
@@ -113,11 +110,10 @@ def run_job(config_file_path, docker_image='', gpu_ids='all', run_timestamp=''):
         
         # Ensure Conda environment is activated, then run the job
         conda_command = [
-            'conda', 'run', '-n', 'lang_ident_classifier', 'bash', '-c',
-            f"source activate lang_ident_classifier && "
-            f"torchrun --nproc-per-node {ppn} --master-port {master_port} "
-            f"run-hyperparam --config={config_file_path} "
-            f"--backend=nccl --run_timestamp {run_timestamp}"
+            'conda', 'run', '-n', 'lang_ident_classifier', 
+            'torchrun', '--nproc-per-node', str(ppn), '--master-port', str(master_port),
+            'run-hyperparam', '--config', config_file_path,
+            '--backend', 'nccl', '--run_timestamp', run_timestamp
         ]
         
         # First torchrun execution
