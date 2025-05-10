@@ -2,14 +2,14 @@ import subprocess
 import time
 
 
-def get_user_input(prompt, default_value=None):
-    """Helper function to get user input with an optional default value"""
-    user_input = input(f"{prompt} (default: {default_value}): ")
-    return user_input if user_input else default_value
+def get_user_input(prompt):
+    """Helper function to get user input without any default value."""
+    user_input = input(f"{prompt}: ")
+    return user_input
 
 
 def is_docker_available():
-    """Check if Docker is available on the system"""
+    """Check if Docker is available on the system."""
     try:
         subprocess.run(["docker", "version"], stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=True)
         return True
@@ -20,7 +20,7 @@ def is_docker_available():
 
 
 def is_conda_available():
-    """Check if Conda is available on the system"""
+    """Check if Conda is available on the system."""
     try:
         subprocess.run(["conda", "--version"], stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=True)
         return True
@@ -31,7 +31,7 @@ def is_conda_available():
 
 
 def run_trial(trial_num, script_path, gpu_ids, run_timestamp, docker_image=None):
-    """Function to run a trial"""
+    """Function to run a trial."""
     print(f"Running trial {trial_num} with GPU(s) {gpu_ids} and timestamp {run_timestamp}...")
 
     # Check if Docker is available and run accordingly
@@ -61,10 +61,10 @@ def run_trial(trial_num, script_path, gpu_ids, run_timestamp, docker_image=None)
 
 def main():
     # Prompt user for script path
-    script_path = get_user_input("Enter the path to the script (e.g., ./standalone_job_optim_test.sh)", "./standalone_job_optim_test.sh")
+    script_path = get_user_input("Enter the path to the script (e.g., ./standalone_job_optim_test.sh)")
 
     # Prompt user for number of trials
-    num_trials = get_user_input("Enter the number of trials to run", "1")
+    num_trials = get_user_input("Enter the number of trials to run")
     
     # Ensure that the number of trials is a valid positive integer
     try:
@@ -76,12 +76,12 @@ def main():
         return
 
     # Prompt user for GPU IDs
-    gpu_ids = get_user_input("Enter the GPU IDs (e.g., 0,1 for multiple GPUs or 'all' for all GPUs)", "all")
+    gpu_ids = get_user_input("Enter the GPU IDs (e.g., 0,1 for multiple GPUs or 'all' for all GPUs)")
 
     # Check if Docker is available
     docker_image = None
     if is_docker_available():
-        docker_image = get_user_input("Enter the Docker image (e.g., smallworld2020/lang_classifier:v3)", "smallworld2020/lang_classifier:v3")
+        docker_image = get_user_input("Enter the Docker image (e.g., smallworld2020/lang_classifier:v3)")
     else:
         print("Docker not available. Will use Conda or fallback to Python environment.")
 
