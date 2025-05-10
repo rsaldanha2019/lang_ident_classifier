@@ -4,6 +4,7 @@ import subprocess
 import time
 import os
 import socket
+import yaml
 
 def is_docker_available():
     """Check if Docker is available on the system"""
@@ -34,10 +35,21 @@ def find_free_port(start_port=8000, end_port=35000):
                 return port
     raise Exception("Could not find a free MASTER_PORT.")
 
+def get_job_name_from_yaml(config_file_path):
+    """Get the job name from the YAML file"""
+    with open(config_file_path, 'r') as file:
+        config = yaml.safe_load(file)
+        # Assuming the YAML file has a 'job_name' field (adjust as per your YAML structure)
+        job_name = config.get('job_name', 'default_job_name')  # Default name if not present
+    return job_name
+
 def run_job(config_file_path, docker_image='', gpu_ids='all', run_timestamp=''):
     # Check if run_timestamp is provided
     if not run_timestamp:
         raise ValueError("Error: --run_timestamp is required.")
+
+    # Get the job name from the config file
+    job_name = get_job_name_from_yaml(config_file_path)
 
     # CPU thread settings
     total_cores = os.cpu_count()
@@ -46,7 +58,6 @@ def run_job(config_file_path, docker_image='', gpu_ids='all', run_timestamp=''):
 
     # Paths
     workdir = os.getcwd()
-    job_name = 'lang_ident_classifier_optim_test'
     job_log_dir = os.path.join(workdir, 'standalone_job_log', job_name)
     os.makedirs(job_log_dir, exist_ok=True)
 
@@ -61,29 +72,36 @@ def run_job(config_file_path, docker_image='', gpu_ids='all', run_timestamp=''):
         gpu_flag = f"\"device={gpu_ids}\""
         ppn = len(gpu_ids.split(','))
 
+    # Prepare the common command for running the job
+    command = [
+        'run-hyperparam', '--config', config_file_path, '--backend', 'nccl', '--run_timestamp', run_timestamp
+    ]
+
     # Running with Docker
     if docker_image:
-        print("Running with Docker...")
-        command = [
+        print(f"Running with Docker for job '{job_name}' using GPUs {gpu_ids}...")
+        docker_command = [
             'docker', 'run', '--rm', '--runtime=nvidia', '--gpus', gpu_flag,
             '-v', f"{workdir}:{workdir}", '-w', '/app', '--ipc=host', docker_image,
-            'run-hyperparam', f'--config={config_file_path}',
-            '--backend=nccl', '--run_timestamp', run_timestamp
-        ]
+            'torchrun', '--nproc-per-node', str(ppn), '--master-port', str(master_port),
+        ] + command  # Append the common command for run-hyperparam
+        
         with open(os.path.join(job_log_dir, f"RUN_{run_timestamp}.out"), 'w') as log_file:
-            subprocess.run(command, stdout=log_file, stderr=log_file)
+            subprocess.run(docker_command, stdout=log_file, stderr=log_file)
 
     # Mimicking Docker's behavior with Conda
     elif shutil.which('conda'):
-        print("Docker not found, mimicking Docker behavior with Conda...")
-        command = [
+        print(f"Docker not found, mimicking Docker behavior with Conda for job '{job_name}' using GPUs {gpu_ids}...")
+        conda_command = [
             'conda', 'run', '-n', 'lang_ident_classifier', 'bash', 
             '-c', f"cd {workdir} && "
+                  f"torchrun --nproc-per-node {ppn} --master-port {master_port} "
                   f"run-hyperparam --config={config_file_path} "
                   f"--backend=nccl --run_timestamp {run_timestamp}"
         ]
+        
         with open(os.path.join(job_log_dir, f"RUN_{run_timestamp}.out"), 'w') as log_file:
-            subprocess.run(command, stdout=log_file, stderr=log_file)
+            subprocess.run(conda_command, stdout=log_file, stderr=log_file)
     
     # If neither Docker nor Conda are available
     else:
@@ -103,7 +121,6 @@ def run_trial(trial_num, config_file_path, gpu_ids, run_timestamp, docker_image=
     elif is_conda_available():
         print(f"Running trial {trial_num} with Conda...")
         try:
-            # Directly run the bash script via Conda with the necessary arguments
             run_job(config_file_path=config_file_path, docker_image=None, gpu_ids=gpu_ids, run_timestamp=run_timestamp)
         except subprocess.CalledProcessError as e:
             print(f"Error during trial {trial_num} execution: {e}")
@@ -148,10 +165,9 @@ def main():
     # Run the trials
     for i in range(1, args.num_trials + 1):
         time.sleep(5)  # Interval between trials
-        if is_docker_available():
-            run_trial(i, args.config_file_path, args.gpu_ids, run_timestamp, args.docker_image)
-        else:
-            run_trial(i, args.config_file_path, args.gpu_ids, run_timestamp, None)
+        print(f"Starting trial {i}...")
+        run_trial(i, args.config_file_path, args.gpu_ids, run_timestamp, args.docker_image)
+
     print("All trials completed!")
 
 if __name__ == "__main__":
