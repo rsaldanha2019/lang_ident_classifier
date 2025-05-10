@@ -1,7 +1,7 @@
+import argparse
 import subprocess
 import time
-import argparse
-import sys
+import os
 
 def is_docker_available():
     """Check if Docker is available on the system"""
@@ -13,94 +13,81 @@ def is_docker_available():
     except subprocess.CalledProcessError:
         return False
 
-def is_script_executable(script_path):
-    """Check if the provided script exists and is executable"""
+def is_conda_available():
+    """Check if Conda is available on the system"""
     try:
-        subprocess.run(["chmod", "+x", script_path], check=True)  # Make it executable if not
+        subprocess.run(["conda", "--version"], stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=True)
         return True
+    except FileNotFoundError:
+        return False
     except subprocess.CalledProcessError:
-        print(f"The specified script {script_path} does not exist or is not executable.")
         return False
 
-def validate_gpu_ids(gpu_ids):
-    """Validate GPU IDs format"""
-    if gpu_ids == "all":
-        return True
-    elif all(gpu_id.isdigit() for gpu_id in gpu_ids.split(",")):
-        return True
-    return False
+def run_trial(trial_num, script_path, gpu_ids, run_timestamp, docker_image=None):
+    """Function to run a trial"""
+    print(f"Running trial {trial_num} with GPU(s) {gpu_ids} and timestamp {run_timestamp}...")
 
-def run_trial(script_path, gpu_ids, run_timestamp, trial_num, docker_image=None):
-    """Run a trial in the background with or without Docker"""
-    print(f"Starting trial {trial_num} with timestamp {run_timestamp}...")
-
-    # Prepare the command based on whether Docker is available
-    command = [script_path, "--gpu-ids", gpu_ids, "--run_timestamp", run_timestamp]
-    
-    if docker_image:
-        # Run the trial with Docker
-        print(f"Running with Docker image: {docker_image}")
-        command = ["docker", "run", "--rm", "--runtime=nvidia", "--gpus", gpu_ids,
-                   "-v", f"{script_path}:{script_path}", "-w", "/app", docker_image] + command
-
-    # Run the script (either with Docker or not)
-    process = subprocess.Popen(command)
-    print(f"Started trial {trial_num}. Background PID: {process.pid}")
-
-    return process
-
-def parse_args():
-    """Parse command-line arguments using argparse"""
-    parser = argparse.ArgumentParser(description="Run parallel trials for script execution.")
-    
-    # Command-line arguments (all are required)
-    parser.add_argument("script_path", help="Path to the script (e.g., ./standalone.sh)", type=str)
-    parser.add_argument("num_trials", type=int, help="Number of parallel trials to run (1 to n)")
-    parser.add_argument("gpu_ids", help="Comma-separated list of GPU IDs (e.g., 0,1 or 'all')", type=str)
-    
-    # Conditional argument for Docker image
-    if is_docker_available():
-        parser.add_argument("docker_image", help="Docker image (e.g., smallworld2020/lang_classifier:v3)", type=str)
-
-    return parser.parse_args()
+    # Check if Docker is available and run accordingly
+    if docker_image and is_docker_available():
+        print(f"Running trial {trial_num} with Docker...")
+        try:
+            subprocess.run([
+                "docker", "run", "--rm", "--runtime=nvidia", "--gpus", gpu_ids,
+                "-v", f"{script_path}:{script_path}",
+                "-w", "/app", "--ipc=host", docker_image,
+                "python", script_path, "--gpu-ids", gpu_ids, "--run_timestamp", run_timestamp
+            ], check=True)
+        except subprocess.CalledProcessError as e:
+            print(f"Error during trial {trial_num} execution: {e}")
+    elif is_conda_available():
+        print(f"Running trial {trial_num} with Conda...")
+        try:
+            subprocess.run([
+                "conda", "run", "-n", "lang_ident_classifier", "python", script_path,
+                "--gpu-ids", gpu_ids, "--run_timestamp", run_timestamp
+            ], check=True)
+        except subprocess.CalledProcessError as e:
+            print(f"Error during trial {trial_num} execution: {e}")
+    else:
+        print("Error: Neither Docker nor Conda found on your system.")
 
 def main():
-    """Main function to handle the user input and execute trials"""
+    parser = argparse.ArgumentParser(description="Run parallel optimization trials.")
     
-    # Parse command-line arguments
-    args = parse_args()
-
-    # Validate the script
-    if not is_script_executable(args.script_path):
-        sys.exit(1)
+    # Adding arguments
+    parser.add_argument('--script_path', type=str, help='Path to the script to run (e.g., ./standalone_job_optim_test.sh)')
+    parser.add_argument('--num_trials', type=int, help='Number of trials to run')
+    parser.add_argument('--gpu_ids', type=str, help="GPU IDs to use (e.g., '0,1' or 'all')")
+    if is_docker_available():
+        parser.add_argument('--docker_image', type=str, help="Docker image to use (optional)", default=None)
+    
+    # Parse the arguments
+    args = parser.parse_args()
     
     # Validate the number of trials
     if args.num_trials < 1:
-        print("Invalid number of trials. Please enter a positive integer greater than 0.")
-        sys.exit(1)
+        print("Error: The number of trials must be at least 1.")
+        return
 
-    # Validate GPU IDs
-    if not validate_gpu_ids(args.gpu_ids):
-        print("Invalid GPU IDs. Please provide a comma-separated list (e.g., 0,1 or 'all').")
-        sys.exit(1)
+    # Ensure GPU IDs format is correct
+    if args.gpu_ids != 'all' and not all(gpu.isdigit() for gpu in args.gpu_ids.split(',')):
+        print("Error: Invalid GPU IDs. Please provide a comma-separated list (e.g., 0,1 or 'all').")
+        return
 
-    # Generate a run timestamp in seconds with float precision
+    # Check if the script exists and is executable
+    if not os.path.exists(args.script_path):
+        print(f"Error: The specified script does not exist: {args.script_path}")
+        return
+
+    # Generate a run timestamp for trial
     run_timestamp = time.strftime("%Y-%m-%d_%H-%M-%S", time.gmtime())
-    print(f"Run Timestamp: {run_timestamp}")
 
-    # Start trials with the given number of parallel executions
-    processes = []
+    # Run the trials
     for i in range(1, args.num_trials + 1):
-        time.sleep(30)  # Interval between trials
-        docker_image = args.docker_image if is_docker_available() else None
-        process = run_trial(args.script_path, args.gpu_ids, run_timestamp, i, docker_image)
-        processes.append(process)
+        time.sleep(5)  # Interval between trials
+        run_trial(i, args.script_path, args.gpu_ids, run_timestamp, args.docker_image)
 
-    # Wait for all processes to complete
-    for process in processes:
-        process.wait()
-
-    print("All trials have been started successfully in the background.")
+    print("All trials completed!")
 
 if __name__ == "__main__":
     main()
