@@ -6,6 +6,7 @@ import os
 import socket
 import yaml
 import random
+from datetime import datetime
 
 def is_docker_available():
     """Check if Docker is available on the system"""
@@ -44,10 +45,18 @@ def get_job_name_from_yaml(config_file_path):
         job_name = config.get('job_name', 'default_job_name')  # Default name if not present
     return job_name
 
+def get_current_timestamp():
+    """Generate a timestamp in yyyymmddhhmmsss format (compact format)"""
+    return datetime.now().strftime("%Y%m%d%H%M%S%f")[:-3]  # Get the timestamp down to milliseconds (excluding last 3 digits of microseconds)
+
 def run_job(config_file_path, docker_image='', gpu_ids='all', run_timestamp=''):
     # Check if run_timestamp is provided
     if not run_timestamp:
         raise ValueError("Error: --run_timestamp is required.")
+    
+    # Use the provided run_timestamp or generate a new one
+    if run_timestamp == 'now':
+        run_timestamp = get_current_timestamp()
 
     # Get the job name from the config file
     job_name = get_job_name_from_yaml(config_file_path)
@@ -174,21 +183,14 @@ def main():
         print(f"Error: The specified file does not exist: {args.config_file_path}")
         return
 
-    # Generate a run timestamp for trial
-    run_timestamp = time.strftime("%Y-%m-%d_%H-%M-%S", time.gmtime())
-
-    # If Docker is available, and user hasn't passed docker_image, prompt for it
-    if is_docker_available() and not args.docker_image:
-        args.docker_image = input("Enter the Docker image (e.g., smallworld2020/lang_classifier:v3): ")
-
     # Run the trials
     for i in range(1, args.num_trials + 1):
+        run_timestamp = get_current_timestamp()  # Get the current timestamp in compact format
         time.sleep(5)  # Interval between trials
         if is_docker_available():
             run_trial(i, args.config_file_path, args.gpu_ids, run_timestamp, args.docker_image)
         else:
-            run_trial(i, args.config_file_path, args.gpu_ids, run_timestamp, None)
-    print("All trials completed!")
+            run_trial(i, args.config_file_path, args.gpu_ids, run_timestamp)
 
 if __name__ == "__main__":
     main()
