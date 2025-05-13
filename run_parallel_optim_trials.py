@@ -111,10 +111,18 @@ def run_job(config_file_path, docker_image='', gpu_ids='all', run_timestamp=''):
         # Ensure Conda environment is activated, then run the job
         conda_command = [
             'conda', 'run', '-n', 'lang_ident_classifier',
-            'bash', '-c', f'export PYTHONPATH=$(conda run -n lang_ident_classifier python -c "import sys; print(sys.prefix)")/lib/python3.10/site-packages && '
-                        f'torchrun --nproc-per-node {ppn} --master-port {master_port} '
-                        f'run-hyperparam --config {config_file_path} '
-                        f'--backend nccl --run_timestamp {run_timestamp}'
+            'bash', '-c',
+            '\
+        export PYTHONPATH=$(pwd)/lib/python3.10/site-packages:\$PYTHONPATH && \
+        export MASTER_PORT=' + str(master_port) + ' && \
+        python -m torch.distributed.run \
+        --nproc-per-node=' + str(ppn) + ' \
+        --master-port=' + str(master_port) + ' \
+        -m lang_ident_classifier.cli.hyperparam_selection_model_optim \
+        --config=' + config_file_path + ' \
+        --backend=nccl \
+        --run_timestamp=' + str(run_timestamp) + ' >> ' +
+        os.path.join(job_log_dir, f"RUN_{run_timestamp}.out") + ' 2>&1'
         ]
 
         # Ensure the command is printed for debugging
@@ -194,4 +202,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
