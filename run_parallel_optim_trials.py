@@ -1,4 +1,5 @@
 import argparse
+import multiprocessing
 import shutil
 import subprocess
 import time
@@ -209,4 +210,5 @@ def main():
             run_trial(i, args.config_file_path, args.gpu_ids, run_timestamp)
 
 if __name__ == "__main__":
+    multiprocessing.set_start_method('spawn')
     main()
