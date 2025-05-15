@@ -79,20 +79,29 @@ def run_job(config_file_path, docker_image='', gpu_ids='all', run_timestamp=''):
         gpu_flag = f"\"device={gpu_ids}\""
         ppn = len(gpu_ids.split(','))
 
-    # Prepare the common command for running the job
-    command = [
-        'run-hyperparam', '--config', config_file_path, '--backend', 'nccl', '--run_timestamp', run_timestamp
-    ]
 
     # Running with Docker
     if docker_image:
         print(f"Running with Docker for job '{job_name}' using GPUs {gpu_ids}...")
         docker_command = [
             'docker', 'run', '--rm', '--runtime=nvidia', '--gpus', gpu_flag,
-            '-v', f"{workdir}:{workdir}", '-w', '/app', '--ipc=host', docker_image,
-            'torchrun', '--nproc-per-node', str(ppn), '--master-port', str(master_port),
-        ] + command  # Append the common command for run-hyperparam
-        
+            '-v', f"{workdir}:/app",
+            '--privileged',
+            '--ipc=host',
+            '--shm-size=16g',
+            '--ulimit', 'nofile=65536:65536',
+            '-w', '/app',
+            docker_image,
+            'python', '-m', 'torch.distributed.run',
+            '--nproc-per-node', str(ppn),
+            '--master-port', str(master_port),
+            '-m', 'lang_ident_classifier.cli.hyperparam_selection_model_optim',
+            '--config', f"/app/{os.path.relpath(config_file_path, workdir)}",
+            '--backend', 'nccl',
+            '--run_timestamp', run_timestamp,
+        ]
+
+
         # First torchrun execution
         with open(os.path.join(job_log_dir, f"RUN_{run_timestamp}.out"), 'w') as log_file:
             subprocess.run(docker_command, stdout=log_file, stderr=log_file)
@@ -111,18 +120,17 @@ def run_job(config_file_path, docker_image='', gpu_ids='all', run_timestamp=''):
         # Ensure Conda environment is activated, then run the job
         conda_command = [
             'conda', 'run', '-n', 'lang_ident_classifier',
-            'bash', '-c',
-            '\
-        export PYTHONPATH=$(pwd)/lib/python3.10/site-packages:\$PYTHONPATH && \
-        export MASTER_PORT=' + str(master_port) + ' && \
-        python -m torch.distributed.run \
-        --nproc-per-node=' + str(ppn) + ' \
-        --master-port=' + str(master_port) + ' \
-        -m lang_ident_classifier.cli.hyperparam_selection_model_optim \
-        --config=' + config_file_path + ' \
-        --backend=nccl \
-        --run_timestamp=' + str(run_timestamp) + ' >> ' +
-        os.path.join(job_log_dir, f"RUN_{run_timestamp}.out") + ' 2>&1'
+            'bash', '-c', f'''
+                export PYTHONPATH=$(pwd)/lib/python3.10/site-packages:$PYTHONPATH && \
+                export MASTER_PORT={master_port} && \
+                python -m torch.distributed.run \
+                --nproc-per-node={ppn} \
+                --master-port={master_port} \
+                -m lang_ident_classifier.cli.hyperparam_selection_model_optim \
+                --config={config_file_path} \
+                --backend=nccl \
+                --run_timestamp={run_timestamp} >> {os.path.join(job_log_dir, f"RUN_{run_timestamp}.out")} 2>&1
+            '''
         ]
 
         # Ensure the command is printed for debugging
