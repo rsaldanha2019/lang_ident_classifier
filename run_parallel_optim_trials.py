@@ -1,5 +1,4 @@
 import argparse
-import multiprocessing
 import shutil
 import subprocess
 import time
@@ -83,15 +82,20 @@ def run_job(config_file_path, docker_image='', gpu_ids='all', run_timestamp=''):
 
     # Running with Docker
     if docker_image:
-        print(f"Running with Docker for job '{job_name}' using GPUs {gpu_ids}...")
+        print(f"Running with Docker for job '{job_name}' using GPUs {gpu_ids}...in {workdir}")
+        uid = os.getuid()
+        gid = os.getgid()
+        # workdir is writable by all users
+        subprocess.run(['chown', '-R', f'{uid}:{gid}', workdir], check=True)
+        subprocess.run(['chmod', '-R', 'a+rwX', workdir], check=True)
+
         docker_command = [
             'docker', 'run', '--rm', '--runtime=nvidia', '--gpus', gpu_flag,
-            '-v', f"{workdir}:/app",
-            '--privileged',
+            '-v', f"{workdir}:/app",           # mount current directory
             '--ipc=host',
-            '--shm-size=16g',
-            '--ulimit', 'nofile=65536:65536',
-            '-w', '/app',
+            '--user', f'{uid}:{gid}',          # run as current user
+            '-w', '/app',                      # set working directory inside container
+            '-e', 'TRANSFORMERS_CACHE=/app/.cache',
             docker_image,
             'python', '-m', 'torch.distributed.run',
             '--nproc-per-node', str(ppn),
@@ -102,18 +106,10 @@ def run_job(config_file_path, docker_image='', gpu_ids='all', run_timestamp=''):
             '--run_timestamp', run_timestamp,
         ]
 
-
         # First torchrun execution
         with open(os.path.join(job_log_dir, f"RUN_{run_timestamp}.out"), 'w') as log_file:
             subprocess.run(docker_command, stdout=log_file, stderr=log_file)
         
-        # Wait for 5-10 seconds before the second run
-        # time.sleep(random.randint(5, 10))
-        
-        # Second torchrun execution
-        # with open(os.path.join(job_log_dir, f"RUN_{run_timestamp}_2.out"), 'w') as log_file:
-        #     subprocess.run(docker_command, stdout=log_file, stderr=log_file)
-
     # Mimicking Docker's behavior with Conda
     elif shutil.which('conda'):
         print(f"Docker not found, mimicking Docker behavior with Conda for job '{job_name}' using GPUs {gpu_ids}...")
@@ -210,5 +206,4 @@ def main():
             run_trial(i, args.config_file_path, args.gpu_ids, run_timestamp)
 
 if __name__ == "__main__":
-    multiprocessing.set_start_method('spawn')
     main()
