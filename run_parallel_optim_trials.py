@@ -86,15 +86,16 @@ def run_job(config_file_path, docker_image='', gpu_ids='all', run_timestamp=''):
         uid = os.getuid()
         gid = os.getgid()
         # workdir is writable by all users
-        subprocess.run(['chown', '-R', f'{uid}:{gid}', workdir], check=True)
-        subprocess.run(['chmod', '-R', 'a+rwX', workdir], check=True)
+        # subprocess.run(['chown', '-R', f'{uid}:{gid}', workdir], check=True)
+        # subprocess.run(['chmod', '-R', 'a+rwX', workdir], check=True)
 
         docker_command = [
             'docker', 'run', '--rm', '--runtime=nvidia', '--gpus', gpu_flag,
             '-v', f"{workdir}:/app",           # mount current directory
             '--ipc=host',
-            '--user', f'{uid}:{gid}',          # run as current user
-            '-w', '/app',                      # set working directory inside container
+            '-w', '/app',                      # working directory inside container
+            '-e', f'UID={uid}',                # pass host UID as env var
+            '-e', f'GID={gid}',                # pass host GID as env var
             '-e', 'TRANSFORMERS_CACHE=/app/.cache',
             docker_image,
             'python', '-m', 'torch.distributed.run',
