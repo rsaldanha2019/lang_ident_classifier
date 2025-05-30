@@ -46,7 +46,7 @@ def get_current_timestamp():
     """Generate a timestamp in yyyymmddhhmmsss format (compact format)"""
     return datetime.now().strftime("%Y%m%d%H%M%S%f")[:-3]  # Get the timestamp down to milliseconds (excluding last 3 digits of microseconds)
 
-def run_job(config_file_path, docker_image='', gpu_ids='all', run_timestamp=''):
+def run_job(config_file_path, docker_image='', gpu_ids='all', run_timestamp='', resume_study_from_trial_number=None):
     # Check if run_timestamp is provided
     if not run_timestamp:
         raise ValueError("Error: --run_timestamp is required.")
@@ -107,6 +107,7 @@ def run_job(config_file_path, docker_image='', gpu_ids='all', run_timestamp=''):
             '--config', f"/app/{os.path.relpath(config_file_path, workdir)}",
             '--backend', 'nccl',
             '--run_timestamp', run_timestamp,
+            '--resume_study_from_trial_number', str(resume_study_from_trial_number),
         ]
 
         # First torchrun execution
@@ -129,7 +130,8 @@ def run_job(config_file_path, docker_image='', gpu_ids='all', run_timestamp=''):
                 -m lang_ident_classifier.cli.hyperparam_selection_model_optim \
                 --config={config_file_path} \
                 --backend=nccl \
-                --run_timestamp={run_timestamp} >> {os.path.join(job_log_dir, f"RUN_{run_timestamp}.out")} 2>&1
+                --run_timestamp={run_timestamp} \
+                --resume_study_from_trial_number={resume_study_from_trial_number} >> {os.path.join(job_log_dir, f"RUN_{run_timestamp}.out")} 2>&1
             '''
         ]
 
@@ -151,7 +153,7 @@ def run_job(config_file_path, docker_image='', gpu_ids='all', run_timestamp=''):
     else:
         raise EnvironmentError("Error: Docker and Conda are both unavailable. Cannot proceed.")
 
-def run_trial(trial_num, config_file_path, gpu_ids, run_timestamp, docker_image=None):
+def run_trial(trial_num, config_file_path, gpu_ids, run_timestamp, docker_image=None, resume_study_from_trial_number=None):
     """Function to run a trial"""
     print(f"Running trial {trial_num} with GPU(s) {gpu_ids} and timestamp {run_timestamp}...")
 
@@ -159,13 +161,13 @@ def run_trial(trial_num, config_file_path, gpu_ids, run_timestamp, docker_image=
     if docker_image and is_docker_available():
         print(f"Running trial {trial_num} with Docker...")
         try:
-            run_job(config_file_path=config_file_path, docker_image=docker_image, gpu_ids=gpu_ids, run_timestamp=run_timestamp)
+            run_job(config_file_path=config_file_path, docker_image=docker_image, gpu_ids=gpu_ids, run_timestamp=run_timestamp, resume_study_from_trial_number=resume_study_from_trial_number)
         except subprocess.CalledProcessError as e:
             print(f"Error during trial {trial_num} execution: {e}")
     elif is_conda_available():
         print(f"Running trial {trial_num} with Conda...")
         try:
-            run_job(config_file_path=config_file_path, docker_image=None, gpu_ids=gpu_ids, run_timestamp=run_timestamp)
+            run_job(config_file_path=config_file_path, docker_image=None, gpu_ids=gpu_ids, run_timestamp=run_timestamp, resume_study_from_trial_number=resume_study_from_trial_number)
         except subprocess.CalledProcessError as e:
             print(f"Error during trial {trial_num} execution: {e}")
     else:
@@ -175,6 +177,7 @@ def main():
     parser = argparse.ArgumentParser(description="Run parallel optimization trials.")
     
     # Adding arguments
+    parser.add_argument('--resume_study_from_trial_number', type=lambda x: int(x) if x != 'None' else None, default=None)
     parser.add_argument('--config_file_path', type=str, help='Path to the config yaml to run (e.g., ./app_config.yaml)')
     parser.add_argument('--num_trials', type=int, help='Number of trials to run')
     parser.add_argument('--gpu_ids', type=str, help="GPU IDs to use (e.g., '0,1' or 'all')")
@@ -204,9 +207,9 @@ def main():
         run_timestamp = get_current_timestamp()  # Get the current timestamp in compact format
         time.sleep(5)  # Interval between trials
         if is_docker_available():
-            run_trial(i, args.config_file_path, args.gpu_ids, run_timestamp, args.docker_image)
+            run_trial(i, args.config_file_path, args.gpu_ids, run_timestamp, args.docker_image, args.resume_study_from_trial_number)
         else:
-            run_trial(i, args.config_file_path, args.gpu_ids, run_timestamp)
+            run_trial(i, args.config_file_path, args.gpu_ids, run_timestamp, args.resume_study_from_trial_number)
 
 if __name__ == "__main__":
     main()
