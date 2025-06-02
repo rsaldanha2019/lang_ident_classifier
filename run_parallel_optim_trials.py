@@ -201,7 +201,6 @@ def main():
     if not os.path.exists(args.config_file_path):
         print(f"Error: The specified file does not exist: {args.config_file_path}")
         return
-
     # Run the trials
     for i in range(1, args.num_trials + 1):
         run_timestamp = get_current_timestamp()  # Get the current timestamp in compact format
@@ -209,7 +208,7 @@ def main():
         if is_docker_available():
             run_trial(i, args.config_file_path, args.gpu_ids, run_timestamp, args.docker_image, args.resume_study_from_trial_number)
         else:
-            run_trial(i, args.config_file_path, args.gpu_ids, run_timestamp, args.resume_study_from_trial_number)
+            run_trial(i, args.config_file_path, args.gpu_ids, run_timestamp, resume_study_from_trial_number=args.resume_study_from_trial_number)
 
 if __name__ == "__main__":
     main()
