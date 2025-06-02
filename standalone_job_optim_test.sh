@@ -1,96 +1,121 @@
 #!/bin/bash
 
-set -e
+# --- DEFAULTS ---
+ENV_TYPE=""
+ENV_VALUE=""
+CONFIG_FILE=""
+PPN=2  # processes per node
+RESUME_STUDY_FROM_TRIAL_NUMBER=""
 
-# Default values
-gpu_ids="all"
-docker_image=""
-run_timestamp=""
-
-# Print arguments to check if they are being passed correctly
-echo "Arguments passed: $@"
-
-# Parse arguments
-for arg in "$@"; do
-  case $arg in
-    --docker_image=*)
-      docker_image="${arg#*=}"
-      shift
-      ;;
-    --gpu_ids=*)
-      gpu_ids="${arg#*=}"
-      shift
-      ;;
-    --run_timestamp=*)
-      run_timestamp="${arg#*=}"
-      shift
-      ;;
-    *)
-      echo "Unknown option: $arg"
-      echo "Usage: $0 [--docker_image=\"<image>\"] [--gpu_ids=\"<gpu_ids>\"] --run_timestamp=\"<timestamp>\""
-      exit 1
-      ;;
-  esac
+# --- PARSE ARGS ---
+while [[ $# -gt 0 ]]; do
+    case $1 in
+        --env)
+            ENV_TYPE_VALUE="$2"
+            if [[ "$ENV_TYPE_VALUE" == "none" ]]; then
+                ENV_TYPE="none"
+                ENV_VALUE=""
+            else
+                IFS=':' read -r ENV_TYPE ENV_VALUE <<< "$ENV_TYPE_VALUE"
+                # Basic validation
+                if [[ "$ENV_TYPE" != "conda" && "$ENV_TYPE" != "docker" ]]; then
+                    echo "Error: --env must be one of: conda:<env_name>, docker:<image_name>, none"
+                    exit 1
+                fi
+            fi
+            shift 2
+            ;;
+        --config)
+            CONFIG_FILE="$2"
+            shift 2
+            ;;
+        --resume_study_from_trial_number)
+            RESUME_STUDY_FROM_TRIAL_NUMBER="$2"
+            shift 2
+            ;;
+        *)
+            echo "Unknown argument: $1"
+            exit 1
+            ;;
+    esac
 done
 
-if [ -z "$run_timestamp" ]; then
-  echo "Error: --run_timestamp is required."
-  exit 1
+if [[ -z "$ENV_TYPE" ]]; then
+    echo "Error: --env is required. Use one of: conda:<env_name>, docker:<image_name>, none"
+    exit 1
 fi
 
-# Ensure GPU IDs are properly set
-if [ -z "$gpu_ids" ]; then
-  echo "Error: --gpu_ids is required."
-  exit 1
+if [[ -z "$CONFIG_FILE" ]]; then
+    echo "Error: --config <config_file.yaml> is required"
+    exit 1
 fi
 
-# CPU thread settings
+# --- SYSTEM SETUP ---
 total_cores=$(nproc)
-num_threads=$(echo "($total_cores * 0.2)/1" | bc)
-if [ "$num_threads" -lt 1 ]; then num_threads=1; fi
+num_threads=$(echo "($total_cores * 0.2) / 1" | bc)
 export OMP_NUM_THREADS=$num_threads
 
-# Paths
+JOB_NAME=$(basename "$CONFIG_FILE" .yaml)
 WORKDIR=$(pwd)
-JOB_NAME=lang_ident_classifier_optim_test
-JOB_LOG_DIR="$WORKDIR/standalone_job_log/$JOB_NAME"
+JOB_LOG_DIR=$WORKDIR/standalone_job_log/$JOB_NAME
 mkdir -p "$JOB_LOG_DIR"
 
-# Find free MASTER_PORT
+if [ -n "$SLURM_JOB_GPUS" ]; then
+    export CUDA_VISIBLE_DEVICES=$(echo $SLURM_JOB_GPUS | tr ',' ',')
+else
+    echo "Warning: SLURM_JOB_GPUS not set. Using all visible GPUs."
+fi
+
 MASTER_PORT=$(for port in $(seq 8000 35000); do nc -z localhost "$port" 2>/dev/null || { echo "$port"; break; }; done)
+RUN_TIMESTAMP=$(date +"%Y%m%d%H%M%S")
 
-# Derive PPN
-if [[ "$gpu_ids" == "all" ]]; then
-  gpu_flag="all"
-  PPN=$(nvidia-smi -L | wc -l)
-else
-  gpu_flag="\"device=$gpu_ids\""
-  PPN=$(echo "$gpu_ids" | tr ',' '\n' | wc -l)
+# Compose resume arg if set
+RESUME_ARG=""
+if [[ -n "$RESUME_STUDY_FROM_TRIAL_NUMBER" ]]; then
+    RESUME_ARG="--resume_study_from_trial_number=$RESUME_STUDY_FROM_TRIAL_NUMBER"
 fi
 
-# If docker_image is set, try to run with Docker
-if [ -n "$docker_image" ]; then
-  # Run docker
-  echo "Running with Docker..."
-  docker run --rm --runtime=nvidia --gpus "$gpu_flag" \
-    -v "$WORKDIR":"$WORKDIR" \
-    -w "/app" \
-    --ipc=host \
-    "$docker_image" \
-    run-hyperparam \
-      --config=app_config_optim_test.yaml \
-      --backend=nccl \
-      --run_timestamp "$run_timestamp" \
-      >> "$JOB_LOG_DIR/RUN_$run_timestamp.out" 2>&1
+# --- RUN ---
+if [ "$ENV_TYPE" == "conda" ]; then
+    echo "Running inside conda env: $ENV_VALUE"
+    conda run -n "$ENV_VALUE" bash -c "export MASTER_PORT=$MASTER_PORT && python -m torch.distributed.run --nproc-per-node=$PPN --master-port=$MASTER_PORT -m lang_ident_classifier.cli.hyperparam_selection_model_optim --config=$CONFIG_FILE --backend=nccl --run_timestamp=$RUN_TIMESTAMP $RESUME_ARG >> $JOB_LOG_DIR/RUN_$RUN_TIMESTAMP.out 2>&1"
+elif [ "$ENV_TYPE" == "docker" ]; then
+    echo "Running inside Docker image: $ENV_VALUE"
+    UID=$(id -u)
+    GID=$(id -g)
+    UNAME=$(whoami)
+    GPU_FLAG="device=$CUDA_VISIBLE_DEVICES"
+
+    docker run --rm --runtime=nvidia --gpus "$GPU_FLAG" \
+        -v "$WORKDIR:/app" \
+        --ipc=host \
+        -w /app \
+        -e UID=$UID \
+        -e GID=$GID \
+        -e USERNAME=$UNAME \
+        -e HF_CACHE=/app/.cache \
+        "$ENV_VALUE" \
+        python -m torch.distributed.run \
+            --nproc-per-node $PPN \
+            --master-port $MASTER_PORT \
+            -m lang_ident_classifier.cli.hyperparam_selection_model_optim \
+            --config "/app/$(basename $CONFIG_FILE)" \
+            --backend nccl \
+            --run_timestamp $RUN_TIMESTAMP \
+            $RESUME_ARG \
+        >> $JOB_LOG_DIR/RUN_$RUN_TIMESTAMP.out 2>&1
+elif [ "$ENV_TYPE" == "none" ]; then
+    echo "Running directly on host (no env)"
+    python -m torch.distributed.run \
+        --nproc-per-node $PPN \
+        --master-port $MASTER_PORT \
+        -m lang_ident_classifier.cli.hyperparam_selection_model_optim \
+        --config $CONFIG_FILE \
+        --backend nccl \
+        --run_timestamp $RUN_TIMESTAMP \
+        $RESUME_ARG \
+        >> $JOB_LOG_DIR/RUN_$RUN_TIMESTAMP.out 2>&1
 else
-  # If Docker is not used, attempt to run using Conda (if available)
-  if command -v conda >/dev/null 2>&1; then
-    echo "Docker not found, running with Conda..."
-    conda run -n lang_ident_classifier bash "$WORKDIR/lang_ident_classifier/standalone_job_optim_test.sh" \
-      --gpu_ids "$gpu_ids" --run_timestamp "$run_timestamp"
-  else
-    echo "Error: Docker and Conda are both unavailable. Cannot proceed."
+    echo "Unknown environment type: $ENV_TYPE"
     exit 1
-  fi
 fi
-
