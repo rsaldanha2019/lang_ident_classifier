@@ -5,13 +5,13 @@ ENV_TYPE=""
 ENV_VALUE=""
 CONFIG_FILE=""
 RESUME_STUDY_FROM_TRIAL_NUMBER=""
+BACKEND="nccl"  # Default backend
 
 # Count how many GPUs are in CUDA_VISIBLE_DEVICES
 if [ -z "$CUDA_VISIBLE_DEVICES" ]; then
     echo "CUDA_VISIBLE_DEVICES not set, defaulting PPN=1"
     PPN=1
 else
-    # Count commas + 1 = number of GPUs
     IFS=',' read -ra gpu_array <<< "$CUDA_VISIBLE_DEVICES"
     PPN=${#gpu_array[@]}
 fi
@@ -41,6 +41,10 @@ while [[ $# -gt 0 ]]; do
             ;;
         --resume_study_from_trial_number)
             RESUME_STUDY_FROM_TRIAL_NUMBER="$2"
+            shift 2
+            ;;
+        --backend)
+            BACKEND="$2"
             shift 2
             ;;
         *)
@@ -73,7 +77,6 @@ mkdir -p "$JOB_LOG_DIR"
 MASTER_PORT=$(for port in $(seq 8000 35000); do nc -z localhost "$port" 2>/dev/null || { echo "$port"; break; }; done)
 RUN_TIMESTAMP=$(date +"%Y%m%d%H%M%S")
 
-# Compose resume arg if set
 RESUME_ARG=""
 if [[ -n "$RESUME_STUDY_FROM_TRIAL_NUMBER" ]]; then
     RESUME_ARG="--resume_study_from_trial_number=$RESUME_STUDY_FROM_TRIAL_NUMBER"
@@ -82,7 +85,7 @@ fi
 # --- RUN ---
 if [ "$ENV_TYPE" == "conda" ]; then
     echo "Running inside conda env: $ENV_VALUE"
-    conda run -n "$ENV_VALUE" bash -c "export MASTER_PORT=$MASTER_PORT && python -m torch.distributed.run --nproc-per-node=$PPN --master-port=$MASTER_PORT -m lang_ident_classifier.cli.hyperparam_selection_model_optim --config=$CONFIG_FILE --backend=nccl --run_timestamp=$RUN_TIMESTAMP $RESUME_ARG >> $JOB_LOG_DIR/RUN_$RUN_TIMESTAMP.out 2>&1"
+    conda run -n "$ENV_VALUE" bash -c "export MASTER_PORT=$MASTER_PORT && python -m torch.distributed.run --nproc-per-node=$PPN --master-port=$MASTER_PORT -m lang_ident_classifier.cli.hyperparam_selection_model_optim --config=$CONFIG_FILE --backend=$BACKEND --run_timestamp=$RUN_TIMESTAMP $RESUME_ARG >> $JOB_LOG_DIR/RUN_$RUN_TIMESTAMP.out 2>&1"
 elif [ "$ENV_TYPE" == "docker" ]; then
     echo "Running inside Docker image: $ENV_VALUE"
     MY_UID=$(id -u)
@@ -104,7 +107,7 @@ elif [ "$ENV_TYPE" == "docker" ]; then
             --master-port $MASTER_PORT \
             -m lang_ident_classifier.cli.hyperparam_selection_model_optim \
             --config "/app/$CONFIG_FILE" \
-            --backend nccl \
+            --backend $BACKEND \
             --run_timestamp $RUN_TIMESTAMP \
             $RESUME_ARG \
         >> $JOB_LOG_DIR/RUN_$RUN_TIMESTAMP.out 2>&1
@@ -115,7 +118,7 @@ elif [ "$ENV_TYPE" == "none" ]; then
         --master-port $MASTER_PORT \
         -m lang_ident_classifier.cli.hyperparam_selection_model_optim \
         --config $CONFIG_FILE \
-        --backend nccl \
+        --backend $BACKEND \
         --run_timestamp $RUN_TIMESTAMP \
         $RESUME_ARG \
         >> $JOB_LOG_DIR/RUN_$RUN_TIMESTAMP.out 2>&1
