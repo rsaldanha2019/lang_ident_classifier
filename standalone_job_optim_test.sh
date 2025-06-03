@@ -4,8 +4,19 @@
 ENV_TYPE=""
 ENV_VALUE=""
 CONFIG_FILE=""
-PPN=2  # processes per node
 RESUME_STUDY_FROM_TRIAL_NUMBER=""
+
+# Count how many GPUs are in CUDA_VISIBLE_DEVICES
+if [ -z "$CUDA_VISIBLE_DEVICES" ]; then
+    echo "CUDA_VISIBLE_DEVICES not set, defaulting PPN=1"
+    PPN=1
+else
+    # Count commas + 1 = number of GPUs
+    IFS=',' read -ra gpu_array <<< "$CUDA_VISIBLE_DEVICES"
+    PPN=${#gpu_array[@]}
+fi
+
+echo "Setting PPN=$PPN based on CUDA_VISIBLE_DEVICES=$CUDA_VISIBLE_DEVICES"
 
 # --- PARSE ARGS ---
 while [[ $# -gt 0 ]]; do
@@ -17,7 +28,6 @@ while [[ $# -gt 0 ]]; do
                 ENV_VALUE=""
             else
                 IFS=':' read -r ENV_TYPE ENV_VALUE <<< "$ENV_TYPE_VALUE"
-                # Basic validation
                 if [[ "$ENV_TYPE" != "conda" && "$ENV_TYPE" != "docker" ]]; then
                     echo "Error: --env must be one of: conda:<env_name>, docker:<image_name>, none"
                     exit 1
@@ -60,12 +70,6 @@ WORKDIR=$(pwd)
 JOB_LOG_DIR=$WORKDIR/standalone_job_log/$JOB_NAME
 mkdir -p "$JOB_LOG_DIR"
 
-if [ -n "$SLURM_JOB_GPUS" ]; then
-    export CUDA_VISIBLE_DEVICES=$(echo $SLURM_JOB_GPUS | tr ',' ',')
-else
-    echo "Warning: SLURM_JOB_GPUS not set. Using all visible GPUs."
-fi
-
 MASTER_PORT=$(for port in $(seq 8000 35000); do nc -z localhost "$port" 2>/dev/null || { echo "$port"; break; }; done)
 RUN_TIMESTAMP=$(date +"%Y%m%d%H%M%S")
 
@@ -81,25 +85,25 @@ if [ "$ENV_TYPE" == "conda" ]; then
     conda run -n "$ENV_VALUE" bash -c "export MASTER_PORT=$MASTER_PORT && python -m torch.distributed.run --nproc-per-node=$PPN --master-port=$MASTER_PORT -m lang_ident_classifier.cli.hyperparam_selection_model_optim --config=$CONFIG_FILE --backend=nccl --run_timestamp=$RUN_TIMESTAMP $RESUME_ARG >> $JOB_LOG_DIR/RUN_$RUN_TIMESTAMP.out 2>&1"
 elif [ "$ENV_TYPE" == "docker" ]; then
     echo "Running inside Docker image: $ENV_VALUE"
-    UID=$(id -u)
-    GID=$(id -g)
-    UNAME=$(whoami)
+    MY_UID=$(id -u)
+    MY_GID=$(id -g)
+    MY_UNAME=$(whoami)
     GPU_FLAG="device=$CUDA_VISIBLE_DEVICES"
 
     docker run --rm --runtime=nvidia --gpus "$GPU_FLAG" \
         -v "$WORKDIR:/app" \
         --ipc=host \
         -w /app \
-        -e UID=$UID \
-        -e GID=$GID \
-        -e USERNAME=$UNAME \
+        -e UID=$MY_UID \
+        -e GID=$MY_GID \
+        -e USERNAME=$MY_UNAME \
         -e HF_CACHE=/app/.cache \
         "$ENV_VALUE" \
         python -m torch.distributed.run \
             --nproc-per-node $PPN \
             --master-port $MASTER_PORT \
             -m lang_ident_classifier.cli.hyperparam_selection_model_optim \
-            --config "/app/$(basename $CONFIG_FILE)" \
+            --config "/app/$CONFIG_FILE" \
             --backend nccl \
             --run_timestamp $RUN_TIMESTAMP \
             $RESUME_ARG \
