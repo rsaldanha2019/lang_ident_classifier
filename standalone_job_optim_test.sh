@@ -91,9 +91,9 @@ elif [ "$ENV_TYPE" == "docker" ]; then
     MY_UID=$(id -u)
     MY_GID=$(id -g)
     MY_UNAME=$(whoami)
-    GPU_FLAG="device=$CUDA_VISIBLE_DEVICES"
+    GPU_FLAG="\"device=$CUDA_VISIBLE_DEVICES\""
 
-    docker run --rm --runtime=nvidia --gpus "$GPU_FLAG" \
+    docker run --rm --runtime=nvidia --gpus $GPU_FLAG \
         -v "$WORKDIR:/app" \
         --ipc=host \
         -w /app \
