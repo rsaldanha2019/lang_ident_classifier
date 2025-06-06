@@ -91,9 +91,20 @@ elif [ "$ENV_TYPE" == "docker" ]; then
     MY_UID=$(id -u)
     MY_GID=$(id -g)
     MY_UNAME=$(whoami)
-    GPU_FLAG="\"device=$CUDA_VISIBLE_DEVICES\""
 
-    docker run --rm --runtime=nvidia --gpus $GPU_FLAG \
+    # Check if NVIDIA is available
+    if command -v nvidia-smi &> /dev/null; then
+        echo "NVIDIA GPU detected. Running with GPU support."
+        RUNTIME="--runtime=nvidia"
+        GPU_FLAG="--gpus \"device=$CUDA_VISIBLE_DEVICES\""
+    else
+        echo "No NVIDIA GPU detected. Running without GPU support."
+        RUNTIME=""
+        GPU_FLAG=""
+    fi
+
+    # Evaluate GPU_FLAG (remove quotes for correct expansion)
+    eval docker run --rm $RUNTIME $GPU_FLAG \
         -v "$WORKDIR:/app" \
         --ipc=host \
         -w /app \
