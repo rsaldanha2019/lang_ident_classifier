@@ -12,7 +12,10 @@ app:
   random_seed:
     20 
   num_trials:
-    500 
+    500
+auth_tokens:
+  REMOVED
+    "REMOVED"
 logs:
   prefix:
     '%Y%m%d'
@@ -40,4 +43,4 @@ model:
   finetune_status:
     False
   max_epochs:
-    5 
+    3 
