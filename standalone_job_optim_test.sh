@@ -6,6 +6,7 @@ ENV_VALUE=""
 CONFIG_FILE=""
 RESUME_STUDY_FROM_TRIAL_NUMBER=""
 BACKEND="nccl"  # Default backend
+CPU_CORES=""    # Optional override for number of CPU cores
 
 # Count how many GPUs are in CUDA_VISIBLE_DEVICES
 if [ -z "$CUDA_VISIBLE_DEVICES" ]; then
@@ -47,6 +48,10 @@ while [[ $# -gt 0 ]]; do
             BACKEND="$2"
             shift 2
             ;;
+        --cpu_cores)
+            CPU_CORES="$2"
+            shift 2
+            ;;
         *)
             echo "Unknown argument: $1"
             exit 1
@@ -64,11 +69,6 @@ if [[ -z "$CONFIG_FILE" ]]; then
     exit 1
 fi
 
-# --- SYSTEM SETUP ---
-total_cores=$(nproc)
-num_threads=$(echo "($total_cores * 0.2) / 1" | bc)
-export OMP_NUM_THREADS=$num_threads
-
 JOB_NAME=$(basename "$CONFIG_FILE" .yaml)
 WORKDIR=$(pwd)
 JOB_LOG_DIR=$WORKDIR/standalone_job_log/$JOB_NAME
@@ -82,17 +82,26 @@ if [[ -n "$RESUME_STUDY_FROM_TRIAL_NUMBER" ]]; then
     RESUME_ARG="--resume_study_from_trial_number=$RESUME_STUDY_FROM_TRIAL_NUMBER"
 fi
 
+CPU_ARG=""
+if [[ -n "$CPU_CORES" ]]; then
+    export OMP_NUM_THREADS=$CPU_CORES
+    export MKL_NUM_THREADS=$CPU_CORES
+    export OPENBLAS_NUM_THREADS=$CPU_CORES
+    export NUMEXPR_NUM_THREADS=$CPU_CORES
+    CPU_ARG="--cpu_cores=$CPU_CORES"
+    echo "[INFO] Setting thread env vars and passing --cpu_cores=$CPU_CORES"
+fi
+
 # --- RUN ---
 if [ "$ENV_TYPE" == "conda" ]; then
     echo "Running inside conda env: $ENV_VALUE"
-    conda run -n "$ENV_VALUE" bash -c "export MASTER_PORT=$MASTER_PORT && python -m torch.distributed.run --nproc-per-node=$PPN --master-port=$MASTER_PORT -m lang_ident_classifier.cli.hyperparam_selection_model_optim --config=$CONFIG_FILE --backend=$BACKEND --run_timestamp=$RUN_TIMESTAMP $RESUME_ARG >> $JOB_LOG_DIR/RUN_$RUN_TIMESTAMP.out 2>&1"
+    conda run -n "$ENV_VALUE" bash -c "export MASTER_PORT=$MASTER_PORT && python -m torch.distributed.run --nproc-per-node=$PPN --master-port=$MASTER_PORT -m lang_ident_classifier.cli.hyperparam_selection_model_optim --config=$CONFIG_FILE $CPU_ARG --backend=$BACKEND --run_timestamp=$RUN_TIMESTAMP $RESUME_ARG >> $JOB_LOG_DIR/RUN_$RUN_TIMESTAMP.out 2>&1"
 elif [ "$ENV_TYPE" == "docker" ]; then
     echo "Running inside Docker image: $ENV_VALUE"
     MY_UID=$(id -u)
     MY_GID=$(id -g)
     MY_UNAME=$(whoami)
 
-    # Check if NVIDIA is available
     if command -v nvidia-smi &> /dev/null; then
         echo "NVIDIA GPU detected. Running with GPU support."
         RUNTIME="--runtime=nvidia"
@@ -103,7 +112,6 @@ elif [ "$ENV_TYPE" == "docker" ]; then
         GPU_FLAG=""
     fi
 
-    # Evaluate GPU_FLAG (remove quotes for correct expansion)
     eval docker run --rm $RUNTIME $GPU_FLAG \
         -v "$WORKDIR:/app" \
         --ipc=host \
@@ -118,6 +126,7 @@ elif [ "$ENV_TYPE" == "docker" ]; then
             --master-port $MASTER_PORT \
             -m lang_ident_classifier.cli.hyperparam_selection_model_optim \
             --config "/app/$CONFIG_FILE" \
+            $CPU_ARG \
             --backend $BACKEND \
             --run_timestamp $RUN_TIMESTAMP \
             $RESUME_ARG \
@@ -129,6 +138,7 @@ elif [ "$ENV_TYPE" == "none" ]; then
         --master-port $MASTER_PORT \
         -m lang_ident_classifier.cli.hyperparam_selection_model_optim \
         --config $CONFIG_FILE \
+        $CPU_ARG \
         --backend $BACKEND \
         --run_timestamp $RUN_TIMESTAMP \
         $RESUME_ARG \
