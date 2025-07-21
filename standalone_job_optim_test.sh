@@ -95,7 +95,7 @@ fi
 # --- RUN ---
 if [ "$ENV_TYPE" == "conda" ]; then
     echo "Running inside conda env: $ENV_VALUE"
-    conda run -n "$ENV_VALUE" bash -c "export MASTER_PORT=$MASTER_PORT && python -m torch.distributed.run --nproc-per-node=$PPN --master-port=$MASTER_PORT -m lang_ident_classifier.cli.hyperparam_selection_model_optim --config=$CONFIG_FILE $CPU_ARG --backend=$BACKEND --run_timestamp=$RUN_TIMESTAMP $RESUME_ARG >> $JOB_LOG_DIR/RUN_$RUN_TIMESTAMP.out 2>&1"
+    bash -c "conda run -n \"$ENV_VALUE\" bash -c 'export MASTER_PORT=$MASTER_PORT && python -m torch.distributed.run --nproc-per-node=$PPN --master-port=$MASTER_PORT -m lang_ident_classifier.cli.hyperparam_selection_model_optim --config=$CONFIG_FILE $CPU_ARG --backend=$BACKEND --run_timestamp=$RUN_TIMESTAMP $RESUME_ARG >> \"$JOB_LOG_DIR/RUN_$RUN_TIMESTAMP.out\" 2>&1'"
 elif [ "$ENV_TYPE" == "docker" ]; then
     echo "Running inside Docker image: $ENV_VALUE"
     MY_UID=$(id -u)
