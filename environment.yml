@@ -7,7 +7,7 @@ channels:
 dependencies:
   - python=3.10
   - pytorch=2.3.0
-  - cudatoolkit=12.1  # Ensure this matches your GPU and FlashAttention needs
+  # - cudatoolkit=12.1  # Ensure this matches your GPU and FlashAttention needs
   - pip
   - pip:
       - filelock==3.16.1
