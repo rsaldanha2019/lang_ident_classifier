@@ -26,7 +26,7 @@ torchmetrics==1.2.1
 transformers==4.48.0
 bitsandbytes==0.45.5
 cachetools==5.5.2
-xformers==0.0.23.post1
+# xformers==0.0.23.post1
 # Optional speedup for attention
-# flash-attn @ git+https://github.com/Dao-AILab/flash-attention.git#egg=flash-attn
+flash-attn @ git+https://github.com/Dao-AILab/flash-attention.git#egg=flash-attn
 
