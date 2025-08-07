@@ -1,7 +1,8 @@
 name: lang_ident_classifier
 channels:
-  - conda-forge
   - pytorch
+  - nvidia
+  - conda-forge
   - defaults
 dependencies:
   - python=3.10
