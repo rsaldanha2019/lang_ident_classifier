@@ -21,6 +21,10 @@ logs:
   message_format:
     '[%(asctime)s GMT] %(levelname)s::%(funcName)s() %(message)s'
 dataset:
+  select_languages:
+    ['English','Hindi','Kannada','Telugu']
+  dataset_share:
+    0.1
   train_dataset_sample_share:
     0.01
   val_dataset_sample_share:
@@ -41,3 +45,4 @@ model:
     False
   max_epochs:
     5 
+
