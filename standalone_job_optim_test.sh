@@ -95,7 +95,7 @@ fi
 # --- RUN ---
 if [ "$ENV_TYPE" == "conda" ]; then
     echo "Running inside conda env: $ENV_VALUE"
-    bash -c "conda run -n \"$ENV_VALUE\" bash -c 'export MASTER_PORT=$MASTER_PORT && python -m torch.distributed.run --nproc-per-node=$PPN --master-port=$MASTER_PORT -m lang_ident_classifier.cli.hyperparam_selection_model_optim --config=$CONFIG_FILE $CPU_ARG --backend=$BACKEND --run_timestamp=$RUN_TIMESTAMP $RESUME_ARG >> \"$JOB_LOG_DIR/RUN_$RUN_TIMESTAMP.out\" 2>&1'"
+    bash -c "conda run -n \"$ENV_VALUE\" bash -c 'export MASTER_PORT=$MASTER_PORT && python -u -m torch.distributed.run --nproc-per-node=$PPN --master-port=$MASTER_PORT -m lang_ident_classifier.cli.hyperparam_selection_model_optim --config=$CONFIG_FILE $CPU_ARG --backend=$BACKEND --run_timestamp=$RUN_TIMESTAMP $RESUME_ARG >> \"$JOB_LOG_DIR/RUN_$RUN_TIMESTAMP.out\" 2>&1'"
 elif [ "$ENV_TYPE" == "docker" ]; then
     echo "Running inside Docker image: $ENV_VALUE"
     MY_UID=$(id -u)
@@ -121,7 +121,7 @@ elif [ "$ENV_TYPE" == "docker" ]; then
         -e USERNAME=$MY_UNAME \
         -e HF_CACHE=/app/.cache \
         "$ENV_VALUE" \
-        python -m torch.distributed.run \
+        python -u -m torch.distributed.run \
             --nproc-per-node $PPN \
             --master-port $MASTER_PORT \
             -m lang_ident_classifier.cli.hyperparam_selection_model_optim \
@@ -133,7 +133,7 @@ elif [ "$ENV_TYPE" == "docker" ]; then
         >> $JOB_LOG_DIR/RUN_$RUN_TIMESTAMP.out 2>&1
 elif [ "$ENV_TYPE" == "none" ]; then
     echo "Running directly on host (no env)"
-    python -m torch.distributed.run \
+    python -u -m torch.distributed.run \
         --nproc-per-node $PPN \
         --master-port $MASTER_PORT \
         -m lang_ident_classifier.cli.hyperparam_selection_model_optim \
