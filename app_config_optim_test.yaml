@@ -15,8 +15,7 @@ app:
     500
 run_config:
   training_precision_type: 16-mixed
-  data_sample_share:
-    - 0.1
+  data_sample_share: [0.1]
 logs:
   prefix:
     '%Y%m%d'
