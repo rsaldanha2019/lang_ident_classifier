@@ -14,10 +14,9 @@ app:
   num_trials:
     500
 run_config:
-  data_sample_share:
-    [0.01]
-  training_precision_type:
-    "16-mixed"
+  training_precision_type: 16-mixed
+  dataset_sample_share:
+    - 0.1
 auth_tokens:
   REMOVED
     "REMOVED"
