@@ -95,7 +95,8 @@ fi
 # --- RUN ---
 if [ "$ENV_TYPE" == "conda" ]; then
     echo "Running inside conda env: $ENV_VALUE"
-    bash -c "conda run -n \"$ENV_VALUE\" bash -c 'export MASTER_PORT=$MASTER_PORT && python -u -m torch.distributed.run --nproc-per-node=$PPN --master-port=$MASTER_PORT -m lang_ident_classifier.cli.hyperparam_selection_model_optim --config=$CONFIG_FILE $CPU_ARG --backend=$BACKEND --run_timestamp=$RUN_TIMESTAMP $RESUME_ARG >> \"$JOB_LOG_DIR/RUN_$RUN_TIMESTAMP.out\" 2>&1'"
+    nohup bash -c "conda run -n \"$ENV_VALUE\" bash -c 'export MASTER_PORT=$MASTER_PORT && python -u -m torch.distributed.run --nproc-per-node=$PPN --master-port=$MASTER_PORT -m lang_ident_classifier.cli.hyperparam_selection_model_optim --config=$CONFIG_FILE $CPU_ARG --backend=$BACKEND --run_timestamp=$RUN_TIMESTAMP $RESUME_ARG >> \"$JOB_LOG_DIR/RUN_$RUN_TIMESTAMP.out\" 2>&1'"
+    
 elif [ "$ENV_TYPE" == "docker" ]; then
     echo "Running inside Docker image: $ENV_VALUE"
     MY_UID=$(id -u)
@@ -112,7 +113,7 @@ elif [ "$ENV_TYPE" == "docker" ]; then
         GPU_FLAG=""
     fi
 
-    eval docker run --rm $RUNTIME $GPU_FLAG \
+    nohup eval docker run --rm $RUNTIME $GPU_FLAG \
         -v "$WORKDIR:/app" \
         --ipc=host \
         -w /app \
@@ -131,9 +132,10 @@ elif [ "$ENV_TYPE" == "docker" ]; then
             --run_timestamp $RUN_TIMESTAMP \
             $RESUME_ARG \
         >> $JOB_LOG_DIR/RUN_$RUN_TIMESTAMP.out 2>&1
+    disown
 elif [ "$ENV_TYPE" == "none" ]; then
     echo "Running directly on host (no env)"
-    python -u -m torch.distributed.run \
+    nohup python -u -m torch.distributed.run \
         --nproc-per-node $PPN \
         --master-port $MASTER_PORT \
         -m lang_ident_classifier.cli.hyperparam_selection_model_optim \
@@ -143,6 +145,7 @@ elif [ "$ENV_TYPE" == "none" ]; then
         --run_timestamp $RUN_TIMESTAMP \
         $RESUME_ARG \
         >> $JOB_LOG_DIR/RUN_$RUN_TIMESTAMP.out 2>&1
+    disown
 else
     echo "Unknown environment type: $ENV_TYPE"
     exit 1
