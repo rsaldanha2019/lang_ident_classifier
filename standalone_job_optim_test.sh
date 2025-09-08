@@ -9,15 +9,11 @@ RESUME_STUDY_FROM_TRIAL_NUMBER=""
 BACKEND="nccl"
 CPU_CORES=""
 
-# --- HELPERS ---
 usage() {
-    cat <<EOF
-Usage: $0 --env <conda:env|docker:image|none> --config <config.yaml> [--backend nccl|gloo] [--cpu_cores N]
-EOF
+    echo "Usage: $0 --env <conda:env|docker:image|none> --config <config.yaml> [--backend nccl|gloo] [--cpu_cores N]"
     exit 1
 }
 
-# --- PARSE ARGS ---
 if [ $# -eq 0 ]; then usage; fi
 
 while [[ $# -gt 0 ]]; do
@@ -30,7 +26,7 @@ while [[ $# -gt 0 ]]; do
             else
                 IFS=':' read -r ENV_TYPE ENV_VALUE <<< "$ENV_TYPE_VALUE"
                 if [[ "$ENV_TYPE" != "conda" && "$ENV_TYPE" != "docker" ]]; then
-                    echo "Error: --env must be one of: conda:<env_name>, docker:<image_name>, none"
+                    echo "Error: --env must be one of: conda:<env>, docker:<image>, none"
                     exit 1
                 fi
             fi
@@ -60,12 +56,11 @@ while [[ $# -gt 0 ]]; do
 done
 
 if [[ -z "$ENV_TYPE" ]]; then
-    echo "Error: --env is required."
+    echo "Error: --env is required"
     exit 1
 fi
-
 if [[ -z "$CONFIG_FILE" ]]; then
-    echo "Error: --config <config_file.yaml> is required"
+    echo "Error: --config <file.yaml> is required"
     exit 1
 fi
 
@@ -74,29 +69,7 @@ WORKDIR=$(pwd)
 JOB_LOG_DIR=$WORKDIR/standalone_job_log/$JOB_NAME
 mkdir -p "$JOB_LOG_DIR"
 
-# Find an unused port for MASTER_PORT
-MASTER_PORT=$(for port in $(seq 8000 35000); do nc -z localhost "$port" 2>/dev/null || { echo "$port"; break; }; done)
-RUN_TIMESTAMP=$(date +"%Y%m%d%H%M%S")
-
-RESUME_ARG=""
-if [[ -n "$RESUME_STUDY_FROM_TRIAL_NUMBER" ]]; then
-    RESUME_ARG="--resume_study_from_trial_number=$RESUME_STUDY_FROM_TRIAL_NUMBER"
-fi
-
-CPU_ARG=""
-if [[ -n "$CPU_CORES" ]]; then
-    export OMP_NUM_THREADS=$CPU_CORES
-    export MKL_NUM_THREADS=$CPU_CORES
-    export OPENBLAS_NUM_THREADS=$CPU_CORES
-    export NUMEXPR_NUM_THREADS=$CPU_CORES
-    CPU_ARG="--cpu_cores=$CPU_CORES"
-    echo "[INFO] Setting thread env vars and passing --cpu_cores=$CPU_CORES"
-fi
-
-# Common python command (safe quoting)
-PY_CMD="python -u -m torch.distributed.run --nproc-per-node $PPN --master-port $MASTER_PORT -m lang_ident_classifier.cli.hyperparam_selection_model_optim --config \"$CONFIG_FILE\" $CPU_ARG --backend $BACKEND --run_timestamp $RUN_TIMESTAMP $RESUME_ARG"
-
-# --- RUN ---
+# PPN
 if [ -z "${CUDA_VISIBLE_DEVICES-}" ]; then
     echo "CUDA_VISIBLE_DEVICES not set, defaulting PPN=1"
     PPN=1
@@ -104,35 +77,59 @@ else
     IFS=',' read -ra gpu_array <<< "$CUDA_VISIBLE_DEVICES"
     PPN=${#gpu_array[@]}
 fi
-echo "Setting PPN=$PPN based on CUDA_VISIBLE_DEVICES=${CUDA_VISIBLE_DEVICES-}"
+echo "PPN=$PPN based on CUDA_VISIBLE_DEVICES=${CUDA_VISIBLE_DEVICES-}"
 
+# Port + timestamp
+MASTER_PORT=$(for port in $(seq 8000 35000); do nc -z localhost "$port" 2>/dev/null || { echo "$port"; break; }; done)
+RUN_TIMESTAMP=$(date +"%Y%m%d%H%M%S")
+
+RESUME_ARG=""
+if [[ -n "${RESUME_STUDY_FROM_TRIAL_NUMBER}" ]]; then
+    RESUME_ARG="--resume_study_from_trial_number=$RESUME_STUDY_FROM_TRIAL_NUMBER"
+fi
+
+CPU_ARG=""
+if [[ -n "${CPU_CORES}" ]]; then
+    export OMP_NUM_THREADS=$CPU_CORES
+    export MKL_NUM_THREADS=$CPU_CORES
+    export OPENBLAS_NUM_THREADS=$CPU_CORES
+    export NUMEXPR_NUM_THREADS=$CPU_CORES
+    CPU_ARG="--cpu_cores=$CPU_CORES"
+    echo "[INFO] Threads set to $CPU_CORES"
+fi
+
+PY_CMD="python -u -m torch.distributed.run \
+    --nproc-per-node $PPN \
+    --master-port $MASTER_PORT \
+    -m lang_ident_classifier.cli.hyperparam_selection_model_optim \
+    --config=$CONFIG_FILE \
+    $CPU_ARG \
+    --backend=$BACKEND \
+    --run_timestamp=$RUN_TIMESTAMP \
+    $RESUME_ARG"
+
+# --- RUN ---
 if [ "$ENV_TYPE" == "conda" ]; then
-    echo "Running inside conda env: $ENV_VALUE"
-    # Use setsid to create a new session. Redirect output to log file.
-    setsid bash -c "conda run -n \"$ENV_VALUE\" bash -c 'export MASTER_PORT=$MASTER_PORT && $PY_CMD' " \
-        >> "$JOB_LOG_DIR/RUN_$RUN_TIMESTAMP.out" 2>&1 >/dev/null 2>&1 &
-
+    echo "Running in conda env: $ENV_VALUE"
+    setsid bash -c "conda run -n \"$ENV_VALUE\" bash -c '
+      export MASTER_PORT=$MASTER_PORT
+      $PY_CMD >> \"$JOB_LOG_DIR/RUN_$RUN_TIMESTAMP.out\" 2>&1
+    '" </dev/null &
     disown
-
-    echo "Launched (conda) detached. Log: $JOB_LOG_DIR/RUN_$RUN_TIMESTAMP.out"
+    echo "Detached conda job. Log: $JOB_LOG_DIR/RUN_$RUN_TIMESTAMP.out"
 
 elif [ "$ENV_TYPE" == "docker" ]; then
-    echo "Running inside Docker image: $ENV_VALUE"
+    echo "Running in Docker image: $ENV_VALUE"
     MY_UID=$(id -u)
     MY_GID=$(id -g)
     MY_UNAME=$(whoami)
-
-    # Build GPU flag for docker
     GPU_FLAG=""
     if [ -n "${CUDA_VISIBLE_DEVICES-}" ]; then
-        GPU_FLAG="--gpus \"device=$CUDA_VISIBLE_DEVICES\""
+        GPU_FLAG="--gpus device=$CUDA_VISIBLE_DEVICES"
     fi
-
-    # Run container detached. Name it for easy inspection.
     CONTAINER_NAME="run_${RUN_TIMESTAMP}"
-    # Remove --rm so container logs remain on crash. Use restart policy.
     docker run -d --name "$CONTAINER_NAME" --restart unless-stopped \
-        ${GPU_FLAG} \
+        $GPU_FLAG \
         -v "$WORKDIR:/app" \
         --ipc=host \
         -w /app \
@@ -142,39 +139,31 @@ elif [ "$ENV_TYPE" == "docker" ]; then
         -e HF_CACHE=/app/.cache \
         "$ENV_VALUE" \
         /bin/bash -c "export MASTER_PORT=$MASTER_PORT && $PY_CMD"
-
-    echo "Launched container $CONTAINER_NAME (detached). View logs: docker logs -f $CONTAINER_NAME"
+    echo "Detached docker container $CONTAINER_NAME. Logs: docker logs -f $CONTAINER_NAME"
 
 elif [ "$ENV_TYPE" == "none" ]; then
-    echo "Running directly on host (no env)"
-    # Use setsid for host run to detach entire process tree from terminal.
-    setsid bash -c "export MASTER_PORT=$MASTER_PORT && $PY_CMD" \
-        >> "$JOB_LOG_DIR/RUN_$RUN_TIMESTAMP.out" 2>&1 </dev/null &
-
+    echo "Running directly on host"
+    setsid bash -c "
+      export MASTER_PORT=$MASTER_PORT
+      $PY_CMD >> \"$JOB_LOG_DIR/RUN_$RUN_TIMESTAMP.out\" 2>&1
+    " </dev/null &
     disown
-
-    echo "Launched (host) detached. Log: $JOB_LOG_DIR/RUN_$RUN_TIMESTAMP.out"
+    echo "Detached host job. Log: $JOB_LOG_DIR/RUN_$RUN_TIMESTAMP.out"
 
 else
-    echo "Unknown environment type: $ENV_TYPE"
+    echo "Unknown env: $ENV_TYPE"
     exit 1
 fi
 
-# Print a small status block to the user
 cat <<EOF
-Job started.
+Job started
 Timestamp: $RUN_TIMESTAMP
 Job name: $JOB_NAME
 Log dir: $JOB_LOG_DIR
 Master port: $MASTER_PORT
 
-To check:
-- For host/conda runs:
-    ps -ef | grep torch.distributed.run
-    tail -n 200 "$JOB_LOG_DIR/RUN_$RUN_TIMESTAMP.out"
-
-- For docker runs:
-    docker ps --filter "name=run_${RUN_TIMESTAMP}"
-    docker logs -f run_${RUN_TIMESTAMP}
+Check progress:
+- Host/Conda: tail -f "$JOB_LOG_DIR/RUN_$RUN_TIMESTAMP.out"
+- Docker: docker logs -f run_${RUN_TIMESTAMP}
 EOF
 
