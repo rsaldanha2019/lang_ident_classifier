@@ -10,7 +10,7 @@ optuna-integration==4.3.0
 pandarallel==1.6.5
 pandas==2.0.3
 pathos==0.3.4
-peft==0.13.0
+peft==0.4.0
 prettytable==3.16.0
 psutil==7.0.0
 polars==1.32.3
