@@ -98,7 +98,7 @@ if [[ -n "${CPU_CORES}" ]]; then
     echo "[INFO] Threads set to $CPU_CORES"
 fi
 
-PY_CMD="python -u -m torch.distributed.run \
+PY_CMD="python -X future_annotations -u -m torch.distributed.run \
     --nproc-per-node $PPN \
     --master-port $MASTER_PORT \
     -m lang_ident_classifier.cli.hyperparam_selection_model_optim \
@@ -107,6 +107,7 @@ PY_CMD="python -u -m torch.distributed.run \
     --backend=$BACKEND \
     --run_timestamp=$RUN_TIMESTAMP \
     $RESUME_ARG"
+
 
 # --- RUN ---
 if [ "$ENV_TYPE" == "conda" ]; then
