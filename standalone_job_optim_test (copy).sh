@@ -101,7 +101,7 @@ fi
 PY_CMD="python -u -m torch.distributed.run \
     --nproc-per-node $PPN \
     --master-port $MASTER_PORT \
-    -m lang_ident_classifier.cli.model_hyperparameter_selectiion \
+    -m lang_ident_classifier.cli.hyperparam_selection_model_optim \
     --config=$CONFIG_FILE \
     $CPU_ARG \
     --backend=$BACKEND \
