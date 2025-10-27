@@ -6,7 +6,6 @@ app:
   checkpoints_dir: "checkpoints"
   random_seed: 20
   num_trials: 500
-
 run_config:
   accumulate_grad_batches: 2
   training_precision_type: "16-mixed"
@@ -20,12 +19,10 @@ run_config:
   loss_type: "class_weighted_focal_loss_with_adaptive_focus_type1"
   learning_rate: 0.001
   num_fc_layers_in_classifier_head: 2
-
 logs:
   prefix: "%Y%m%d"
   suffix: "lang_ident_classifier_app.log"
   message_format: "[%(asctime)s GMT] %(levelname)s::%(funcName)s() %(message)s"
-
 dataset:
   train_dataset_sample_share: 0.01
   val_dataset_sample_share: 0.01
@@ -36,7 +33,6 @@ dataset:
     data_dir: "val"
   test:
     data_dir: "test"
-
 model:
   finetune_status: False
   max_epochs: 3
