@@ -10,7 +10,7 @@ BACKEND="nccl"
 CPU_CORES=""
 
 usage() {
-    echo "Usage: $0 --env <conda:env|docker:image|none> --config <config.yaml> [--backend nccl|gloo] [--cpu_cores N]"
+    echo "Usage: $0 --env <conda:env|docker:image|none> --config_file_path <config.yaml> [--backend nccl|gloo] [--cpu_cores N]"
     exit 1
 }
 
