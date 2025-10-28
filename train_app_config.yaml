@@ -11,7 +11,7 @@ run_config:
   accumulate_grad_batches: 2
   training_precision_type: "16-mixed"
   data_sample_share: 1.0
-  pretrained_embedding_name: "ai4bharat/IndicBERTv2-MLM-only"
+  pretrained_embedding: "ai4bharat/IndicBERTv2-MLM-only"
   pretrained_embedding_overwrite_old: False
   max_seq_len: 500
   batch_size: 4
