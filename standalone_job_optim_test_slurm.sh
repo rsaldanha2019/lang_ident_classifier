@@ -36,7 +36,7 @@ while [[ $# -gt 0 ]]; do
             fi
             shift 2
             ;;
-        --config)
+        --config_file_path)
             CONFIG_FILE="$2"
             shift 2
             ;;
