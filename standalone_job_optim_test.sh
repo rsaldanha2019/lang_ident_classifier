@@ -32,7 +32,7 @@ while [[ $# -gt 0 ]]; do
             fi
             shift 2
             ;;
-        --config)
+        --config_file_path)
             CONFIG_FILE="$2"
             shift 2
             ;;
@@ -60,7 +60,7 @@ if [[ -z "$ENV_TYPE" ]]; then
     exit 1
 fi
 if [[ -z "$CONFIG_FILE" ]]; then
-    echo "Error: --config <file.yaml> is required"
+    echo "Error: --config_file_path <file.yaml> is required"
     exit 1
 fi
 
