@@ -31,6 +31,8 @@ run_config:
     - class_weighted_focal_loss_with_adaptive_focus_type1
   learning_rate: [1e-3]
   num_fc_layers_in_classifier_head: [2]
+  activation_function_for_layer: ['parametric_relu']
+  add_dropout_after_embedding: [True]
 logs:
   prefix:
     '%Y%m%d'
