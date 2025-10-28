@@ -1,3 +1,4 @@
+operation_mode: "model_train"
 app:
   model_config_name: "lang_ident_classifier_optim_test"
   data_dir: "data"
