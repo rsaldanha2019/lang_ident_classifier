@@ -102,7 +102,7 @@ PY_CMD="python -u -m torch.distributed.run \
     --nproc-per-node $PPN \
     --master-port $MASTER_PORT \
     -m lang_ident_classifier.cli.lang_ident_classifier_api \
-    --config=$CONFIG_FILE \
+    --config_file_path=$CONFIG_FILE \
     $CPU_ARG \
     --backend=$BACKEND \
     --run_timestamp=$RUN_TIMESTAMP \
