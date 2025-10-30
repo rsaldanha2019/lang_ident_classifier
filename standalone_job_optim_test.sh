@@ -95,7 +95,7 @@ PY_CMD="python -u -m torch.distributed.run \
     --config_file_path=$CONFIG_FILE \
     $CPU_ARG \
     --backend=$BACKEND \
-    --run_timestamp=$RUN_TIMESTAMP
+    --run_timestamp=$RUN_TIMESTAMP"
 
 # --- RUN ---
 if [ "$ENV_TYPE" == "conda" ]; then
