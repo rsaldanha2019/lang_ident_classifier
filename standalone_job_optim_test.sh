@@ -5,7 +5,6 @@ set -euo pipefail
 ENV_TYPE=""
 ENV_VALUE=""
 CONFIG_FILE=""
-RESUME_STUDY_FROM_TRIAL_NUMBER=""
 BACKEND="nccl"
 CPU_CORES=""
 
@@ -34,10 +33,6 @@ while [[ $# -gt 0 ]]; do
             ;;
         --config_file_path)
             CONFIG_FILE="$2"
-            shift 2
-            ;;
-        --resume_study_from_trial_number)
-            RESUME_STUDY_FROM_TRIAL_NUMBER="$2"
             shift 2
             ;;
         --backend)
@@ -83,11 +78,6 @@ echo "PPN=$PPN based on CUDA_VISIBLE_DEVICES=${CUDA_VISIBLE_DEVICES-}"
 MASTER_PORT=$(for port in $(seq 8000 35000); do nc -z localhost "$port" 2>/dev/null || { echo "$port"; break; }; done)
 RUN_TIMESTAMP=$(date +"%Y%m%d%H%M%S")
 
-RESUME_ARG=""
-if [[ -n "${RESUME_STUDY_FROM_TRIAL_NUMBER}" ]]; then
-    RESUME_ARG="--resume_study_from_trial_number=$RESUME_STUDY_FROM_TRIAL_NUMBER"
-fi
-
 CPU_ARG=""
 if [[ -n "${CPU_CORES}" ]]; then
     export OMP_NUM_THREADS=$CPU_CORES
@@ -105,9 +95,7 @@ PY_CMD="python -u -m torch.distributed.run \
     --config_file_path=$CONFIG_FILE \
     $CPU_ARG \
     --backend=$BACKEND \
-    --run_timestamp=$RUN_TIMESTAMP \
-    $RESUME_ARG"
-
+    --run_timestamp=$RUN_TIMESTAMP
 
 # --- RUN ---
 if [ "$ENV_TYPE" == "conda" ]; then

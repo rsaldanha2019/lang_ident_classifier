@@ -10,7 +10,7 @@ BACKEND="nccl"
 CPU_CORES=""
 
 usage() {
-    echo "Usage: $0 --env <conda:env|docker:image|none> --config <config.yaml> [--backend nccl|gloo] [--cpu_cores N]"
+    echo "Usage: $0 --env <conda:env|docker:image|none> --config_file_path <config.yaml> [--backend nccl|gloo] [--cpu_cores N]"
     exit 1
 }
 
@@ -32,7 +32,7 @@ while [[ $# -gt 0 ]]; do
             fi
             shift 2
             ;;
-        --config)
+        --config_file_path)
             CONFIG_FILE="$2"
             shift 2
             ;;
@@ -60,7 +60,7 @@ if [[ -z "$ENV_TYPE" ]]; then
     exit 1
 fi
 if [[ -z "$CONFIG_FILE" ]]; then
-    echo "Error: --config <file.yaml> is required"
+    echo "Error: --config_file_path <file.yaml> is required"
     exit 1
 fi
 
@@ -101,8 +101,8 @@ fi
 PY_CMD="python -u -m torch.distributed.run \
     --nproc-per-node $PPN \
     --master-port $MASTER_PORT \
-    -m lang_ident_classifier.cli.hyperparam_selection_model_optim \
-    --config=$CONFIG_FILE \
+    -m lang_ident_classifier.cli.lang_ident_classifier_api \
+    --config_file_path=$CONFIG_FILE \
     $CPU_ARG \
     --backend=$BACKEND \
     --run_timestamp=$RUN_TIMESTAMP \
