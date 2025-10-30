@@ -1,3 +1,5 @@
+operation_mode:
+  "process_bhasha_dataset"
 app:
   model_config_name:
     "process_dataset"
