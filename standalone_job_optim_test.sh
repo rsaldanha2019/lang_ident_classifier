@@ -91,6 +91,7 @@ fi
 PY_CMD="python -u -m torch.distributed.run \
     --nproc-per-node $PPN \
     --master-port $MASTER_PORT \
+    -- \
     -m lang_ident_classifier.cli.lang_ident_classifier_api \
     --config_file_path=$CONFIG_FILE \
     $CPU_ARG \
