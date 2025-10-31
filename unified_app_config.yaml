@@ -41,6 +41,7 @@ logs:
   message_format:
     '[%(asctime)s GMT] %(levelname)s::%(funcName)s() %(message)s'
 dataset:
+  data_source_dir: "bhasha"
   train_dataset_sample_share:
     0.01
   val_dataset_sample_share:

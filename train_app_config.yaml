@@ -30,6 +30,7 @@ dataset:
   train_dataset_sample_share: 0.01
   val_dataset_sample_share: 0.01
   files_have_header: True
+  data_source_dir: "bhasha"
   train:
     data_dir: "train"
   val:
