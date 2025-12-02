@@ -7,7 +7,7 @@ ENV_VALUE=""
 CONFIG_FILE=""
 BACKEND="nccl"
 CPU_CORES=""
-export PYTORCH_CUDA_ALLOC_CONF="expandable_segments:True,max_split_size_mb:128"
+export PYTORCH_CUDA_ALLOC_CONF="expandable_segments:True,max_split_size_mb:1024"
 export TOKENIZERS_PARALLELISM="true"
 
 usage() {
