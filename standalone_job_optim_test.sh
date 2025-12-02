@@ -7,6 +7,8 @@ ENV_VALUE=""
 CONFIG_FILE=""
 BACKEND="nccl"
 CPU_CORES=""
+export PYTORCH_CUDA_ALLOC_CONF="expandable_segments:True,max_split_size_mb:128"
+export TOKENIZERS_PARALLELISM="true"
 
 usage() {
     echo "Usage: $0 --env <conda:env|docker:image|none> --config_file_path <config.yaml> [--backend nccl|gloo] [--cpu_cores N]"
