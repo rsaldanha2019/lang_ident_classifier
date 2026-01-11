@@ -1,5 +1,5 @@
 filelock==3.16.1
-huggingface_hub==0.27.1
+huggingface_hub==0.34.0
 ipywidgets==8.1.7
 langcodes==3.4.0
 lightning==2.1.4
