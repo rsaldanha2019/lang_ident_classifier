@@ -27,6 +27,6 @@ sentencepiece==0.2.0
 scikit_learn==1.6.1
 torch==2.3.0
 torchmetrics==1.2.1
-transformers==4.48.0
+transformers==4.56.0
 bitsandbytes==0.45.5
 cachetools==5.5.2
