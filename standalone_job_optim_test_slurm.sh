@@ -1,14 +1,14 @@
 #!/bin/bash
 
-# --- DEFAULTS ---
+# ---------------- DEFAULTS ----------------
 ENV_TYPE=""
 ENV_VALUE=""
 CONFIG_FILE=""
 RESUME_STUDY_FROM_TRIAL_NUMBER=""
-BACKEND="nccl"  # Default backend
-CPU_CORES=""    # Optional override for number of CPU cores
+BACKEND="nccl"
+CPU_CORES=""
 
-# Count how many GPUs are in CUDA_VISIBLE_DEVICES
+# ---------------- DEVICE COUNT ----------------
 if [ -z "$CUDA_VISIBLE_DEVICES" ]; then
     echo "CUDA_VISIBLE_DEVICES not set, defaulting PPN=1"
     PPN=1
@@ -19,7 +19,7 @@ fi
 
 echo "Setting PPN=$PPN based on CUDA_VISIBLE_DEVICES=$CUDA_VISIBLE_DEVICES"
 
-# --- PARSE ARGS ---
+# ---------------- ARG PARSING ----------------
 while [[ $# -gt 0 ]]; do
     case $1 in
         --env)
@@ -29,10 +29,6 @@ while [[ $# -gt 0 ]]; do
                 ENV_VALUE=""
             else
                 IFS=':' read -r ENV_TYPE ENV_VALUE <<< "$ENV_TYPE_VALUE"
-                if [[ "$ENV_TYPE" != "conda" && "$ENV_TYPE" != "docker" ]]; then
-                    echo "Error: --env must be one of: conda:<env_name>, docker:<image_name>, none"
-                    exit 1
-                fi
             fi
             shift 2
             ;;
@@ -59,23 +55,23 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
-if [[ -z "$ENV_TYPE" ]]; then
-    echo "Error: --env is required. Use one of: conda:<env_name>, docker:<image_name>, none"
+if [[ -z "$ENV_TYPE" || -z "$CONFIG_FILE" ]]; then
+    echo "Error: --env and --config_file_path are required"
     exit 1
 fi
 
-if [[ -z "$CONFIG_FILE" ]]; then
-    echo "Error: --config <config_file.yaml> is required"
-    exit 1
-fi
-
+# ---------------- SETUP ----------------
 JOB_NAME=$(basename "$CONFIG_FILE" .yaml)
 WORKDIR=$(pwd)
-JOB_LOG_DIR=$WORKDIR/standalone_job_log/$JOB_NAME
+JOB_LOG_DIR="$WORKDIR/standalone_job_log/$JOB_NAME"
 mkdir -p "$JOB_LOG_DIR"
 
-MASTER_PORT=$(for port in $(seq 8000 35000); do nc -z localhost "$port" 2>/dev/null || { echo "$port"; break; }; done)
 RUN_TIMESTAMP=$(date +"%Y%m%d%H%M%S")
+LOG_FILE="$JOB_LOG_DIR/RUN_$RUN_TIMESTAMP.out"
+
+MASTER_PORT=$(for port in $(seq 8000 35000); do
+    nc -z localhost "$port" 2>/dev/null || { echo "$port"; break; }
+done)
 
 RESUME_ARG=""
 if [[ -n "$RESUME_STUDY_FROM_TRIAL_NUMBER" ]]; then
@@ -89,61 +85,77 @@ if [[ -n "$CPU_CORES" ]]; then
     export OPENBLAS_NUM_THREADS=$CPU_CORES
     export NUMEXPR_NUM_THREADS=$CPU_CORES
     CPU_ARG="--cpu_cores=$CPU_CORES"
-    echo "[INFO] Setting thread env vars and passing --cpu_cores=$CPU_CORES"
 fi
 
-# --- RUN ---
+# ---------------- CUDA PINNING WRAPPER ----------------
+PIN_CUDA_CMD='
+if [ -n "$CUDA_VISIBLE_DEVICES" ] && [ -n "$LOCAL_RANK" ]; then
+    IFS=\",\" read -ra DEV <<< "$CUDA_VISIBLE_DEVICES"
+    export CUDA_VISIBLE_DEVICES="${DEV[$LOCAL_RANK]}"
+fi
+'
+
+# ---------------- RUN ----------------
 if [ "$ENV_TYPE" == "conda" ]; then
     echo "Running inside conda env: $ENV_VALUE"
-    bash -c "conda run -n \"$ENV_VALUE\" bash -c 'export MASTER_PORT=$MASTER_PORT && python -u -m torch.distributed.run --nproc-per-node=$PPN --master-port=$MASTER_PORT -m lang_ident_classifier.cli.lang_ident_classifier_api --config=$CONFIG_FILE $CPU_ARG --backend=$BACKEND --run_timestamp=$RUN_TIMESTAMP $RESUME_ARG >> \"$JOB_LOG_DIR/RUN_$RUN_TIMESTAMP.out\" 2>&1'"
+
+    conda run -n "$ENV_VALUE" bash -c "
+    export MASTER_PORT=$MASTER_PORT
+    $PIN_CUDA_CMD
+    python -u -m torch.distributed.run \
+        --nproc-per-node=$PPN \
+        --master-port=$MASTER_PORT \
+        -m lang_ident_classifier.cli.lang_ident_classifier_api \
+        --config=$CONFIG_FILE \
+        $CPU_ARG \
+        --backend=$BACKEND \
+        --run_timestamp=$RUN_TIMESTAMP \
+        $RESUME_ARG \
+    >> \"$LOG_FILE\" 2>&1
+    "
+
 elif [ "$ENV_TYPE" == "docker" ]; then
     echo "Running inside Docker image: $ENV_VALUE"
-    MY_UID=$(id -u)
-    MY_GID=$(id -g)
-    MY_UNAME=$(whoami)
 
-    if command -v nvidia-smi &> /dev/null; then
-        echo "NVIDIA GPU detected. Running with GPU support."
-        RUNTIME="--runtime=nvidia"
-        GPU_FLAG="--gpus \"device=$CUDA_VISIBLE_DEVICES\""
-    else
-        echo "No NVIDIA GPU detected. Running without GPU support."
-        RUNTIME=""
-        GPU_FLAG=""
-    fi
-
-    eval docker run --rm $RUNTIME $GPU_FLAG \
+    docker run --rm --runtime=nvidia \
+        --gpus "device=$CUDA_VISIBLE_DEVICES" \
         -v "$WORKDIR:/app" \
         --ipc=host \
         -w /app \
-        -e UID=$MY_UID \
-        -e GID=$MY_GID \
-        -e USERNAME=$MY_UNAME \
-        -e HF_CACHE=/app/.cache \
         "$ENV_VALUE" \
+        bash -c "
+        export MASTER_PORT=$MASTER_PORT
+        $PIN_CUDA_CMD
         python -u -m torch.distributed.run \
-            --nproc-per-node $PPN \
-            --master-port $MASTER_PORT \
+            --nproc-per-node=$PPN \
+            --master-port=$MASTER_PORT \
             -m lang_ident_classifier.cli.lang_ident_classifier_api \
-            --config "/app/$CONFIG_FILE" \
+            --config=/app/$CONFIG_FILE \
             $CPU_ARG \
-            --backend $BACKEND \
-            --run_timestamp $RUN_TIMESTAMP \
-            $RESUME_ARG \
-        >> $JOB_LOG_DIR/RUN_$RUN_TIMESTAMP.out 2>&1
+            --backend=$BACKEND \
+            --run_timestamp=$RUN_TIMESTAMP \
+            $RESUME_ARG
+        " >> "$LOG_FILE" 2>&1
+
 elif [ "$ENV_TYPE" == "none" ]; then
-    echo "Running directly on host (no env)"
+    echo "Running directly on host"
+
+    bash -c "
+    export MASTER_PORT=$MASTER_PORT
+    $PIN_CUDA_CMD
     python -u -m torch.distributed.run \
-        --nproc-per-node $PPN \
-        --master-port $MASTER_PORT \
+        --nproc-per-node=$PPN \
+        --master-port=$MASTER_PORT \
         -m lang_ident_classifier.cli.lang_ident_classifier_api \
-        --config $CONFIG_FILE \
+        --config=$CONFIG_FILE \
         $CPU_ARG \
-        --backend $BACKEND \
-        --run_timestamp $RUN_TIMESTAMP \
-        $RESUME_ARG \
-        >> $JOB_LOG_DIR/RUN_$RUN_TIMESTAMP.out 2>&1
+        --backend=$BACKEND \
+        --run_timestamp=$RUN_TIMESTAMP \
+        $RESUME_ARG
+    " >> "$LOG_FILE" 2>&1
+
 else
     echo "Unknown environment type: $ENV_TYPE"
     exit 1
 fi
+
