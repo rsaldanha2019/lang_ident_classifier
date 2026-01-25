@@ -25,7 +25,7 @@ run_config:
     #- meta-llama/Llama-3.2-1B-Instruct
     #- ai4bharat/IndicBERTv2-MLM-only
   pretrained_embedding_overwrite_old: False
-  percentage_of_max_seq_len: [0.25, 0.5, 0.75, 1.0]
+  max_seq_len: [100, 200, 500]
   batch_size: [4]
   optimizer: ['adamw']
   percentage_of_backbone_model_units_unfrozen: [0, 0.25, 0.5, 0.75, 1.0]
