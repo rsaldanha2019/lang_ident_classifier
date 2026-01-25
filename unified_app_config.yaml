@@ -26,6 +26,7 @@ run_config:
     #- ai4bharat/IndicBERTv2-MLM-only
   pretrained_embedding_overwrite_old: False
   max_seq_len: [100, 200, 500]
+  words_overlap_percentage: [0.25, 0.5, 0.75, 1.0]
   batch_size: [4]
   optimizer: ['adamw']
   percentage_of_backbone_model_units_unfrozen: [0, 0.25, 0.5, 0.75, 1.0]
