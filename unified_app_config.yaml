@@ -28,7 +28,7 @@ run_config:
   max_seq_len: [500]
   batch_size: [4]
   optimizer: ['adamw']
-  num_backbone_model_units_unfrozen: [4]
+  num_backbone_model_units_unfrozen: [2]
   loss_type:
     - class_weighted_focal_loss_with_adaptive_focus_type1
   learning_rate: [1e-3]
