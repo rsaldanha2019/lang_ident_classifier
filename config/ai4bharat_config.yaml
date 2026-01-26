@@ -67,4 +67,4 @@ model:
   finetune_status:
     False
   max_epochs:
-    3 
+    5 
