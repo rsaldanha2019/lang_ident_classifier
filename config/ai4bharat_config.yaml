@@ -17,7 +17,7 @@ app:
     50
 run_config:
   accumulate_grad_batches: 8
-  training_precision_type: 16-mixed
+  training_precision_type: bf16-mixed
   data_sample_share: [1.0]
   pretrained_embedding:
     - ai4bharat/IndicBERTv2-MLM-only
