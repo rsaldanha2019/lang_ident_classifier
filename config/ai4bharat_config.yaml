@@ -12,7 +12,9 @@ app:
   checkpoints_dir:
     "checkpoints"
   random_seed:
-    20 
+    20
+  strategy:
+    "ddp" 
   num_trials:
     50
 run_config:
