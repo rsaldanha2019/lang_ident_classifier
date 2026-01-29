@@ -26,7 +26,7 @@ run_config:
   pretrained_embedding_overwrite_old: False
   max_seq_len: [200, 350, 500]
   words_overlap_percentage: [0.1, 0.25, 0.5]
-  batch_size: [8, 16, 32]
+  batch_size: [8, 16, 32, 64]
   optimizer: ['adamw']
   percentage_of_backbone_model_units_unfrozen: [0, 0.25, 0.5, 0.75, 1.0]
   loss_type:
