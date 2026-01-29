@@ -14,7 +14,7 @@ app:
   random_seed:
     20
   strategy:
-    "ddp"
+    "fsdp"
   num_trials:
     50
 run_config:
