@@ -26,47 +26,49 @@ def main():
     mean_acc = np.mean(values) if values else 0
     std_acc = np.std(values) if values else 0
 
-    # 2. DYNAMIC STABILITY LOGIC
-    # Instead of a fixed 10x, we look at the 'Volatility Index'
+    # 2. DYNAMIC STABILITY TARGET
     volatility = (std_acc / mean_acc) if mean_acc > 0 else 1.0
-    
-    # If volatility is low (<0.05), we only need 5x params. 
-    # If high (>0.2), we need the full 10x or 15x.
     dynamic_multiplier = 10 if volatility > 0.1 else 5
     dynamic_target = n_params * dynamic_multiplier
     trials_needed = max(0, dynamic_target - n_completed)
     
-    # Check for early convergence signal
+    # 3. DOUBLE PARETO LOGIC (0.25 Params / 0.25 Trials)
     importance = get_param_importances(study)
-    top_params = list(importance.keys())[:3]
-    top_trials = sorted(completed, key=lambda t: t.value, reverse=True)[:3]
     
-    # If top 3 parameters are STABLE across top 3 trials, we are near convergence
-    convergence_score = 0
-    if len(top_trials) >= 3:
-        for p in top_params:
-            if len(set([str(t.params.get(p)) for t in top_trials])) == 1:
-                convergence_score += 1
+    # Selection A: Top 25% of Parameters
+    n_top_params = max(2, int(n_params * 0.25)) 
+    top_params_list = list(importance.keys())[:n_top_params]
     
-    # 3. Header Panel
-    status_color = "green" if convergence_score >= 2 else "yellow"
-    header = Panel(
-        f"[bold cyan]Study:[/bold cyan] {STUDY_NAME}\n"
-    status_color = "green" if convergence_score >= 2 else "yellow"
+    # Selection B: Top 25% of Trials (Consensus Group - minimum of 3)
+    n_elite_trials = max(3, int(n_completed * 0.25)) 
+    elite_trials = sorted(completed, key=lambda t: t.value, reverse=True)[:n_elite_trials]
+    
+    convergence_count = 0
+    if len(elite_trials) >= 3:
+        for p in top_params_list:
+            # Agreement check across the top 25% elite trial group
+            values_in_elite = [str(t.params.get(p)) for t in elite_trials]
+            if len(set(values_in_elite)) == 1:
+                convergence_count += 1
+    
+    # 4. Header Panel
+    convergence_ratio = convergence_count / n_top_params
+    status_color = "green" if convergence_ratio >= 0.66 else "yellow"
+    
     header = Panel(
         f"[bold cyan]Study:[/bold cyan] {STUDY_NAME}\n"
         f"[bold green]Best Value:[/bold green] {best_acc:.4f} | [bold white]Trials:[/bold white] {n_completed}\n"
-        f"Convergence Signal: [{status_color}]{'HIGH' if convergence_score >= 2 else 'LOW'}[/{status_color}] "
-        f"(Volatility: {volatility:.2f})",
-        title="Dynamic HPO Analytics", border_style="magenta"
+        f"Convergence Signal: [{status_color}]{'HIGH' if convergence_ratio >= 0.66 else 'LOW'}[/{status_color}] "
+        f"({convergence_count}/{n_top_params} Elite Params stable across top {n_elite_trials} trials)",
+        title="Pareto² Analytics (25/25 Rule)", border_style="magenta"
     )
     console.print(header)
 
-    # 4. Roadmap (Dynamic Target)
+    # 5. Roadmap & Statistics
     engine_panel = Panel(
-        f"Dynamic Target: [bold cyan]{dynamic_target}[/bold cyan] trials\n"
-        f"Needed: [bold yellow]{trials_needed}[/bold yellow]\n"
-        f"Basis: {'High Volatility' if dynamic_multiplier == 10 else 'Stable Signal'}",
+        f"Expected Stability: [bold cyan]at trial {dynamic_target}[/bold cyan]\n"
+        f"Elite Group Size: [bold yellow]{n_elite_trials}[/bold yellow] trials\n"
+        f"Remaining: [bold white]{trials_needed}[/bold white] trials",
         title="Roadmap", border_style="blue"
     )
     stats_panel = Panel(
@@ -75,32 +77,34 @@ def main():
     )
     console.print(Columns([engine_panel, stats_panel]))
 
-    # 5. Importance Table
-    table = Table(title="\nHyperparameter Impact", header_style="bold yellow")
+    # 6. Importance Table
+    table = Table(title="\nHyperparameter Impact (0.25/0.25 Scaling)", header_style="bold yellow")
     table.add_column("Rank", justify="center")
     table.add_column("Hyperparameter", style="cyan")
     table.add_column("Impact %", justify="right")
-    table.add_column("Visualization")
     table.add_column("Current Best", style="green")
-    table.add_column("Support", justify="center")
+    table.add_column("Support Status", justify="center")
 
     for i, (param, score) in enumerate(importance.items(), 1):
         pct = score * 100
-        bar = "█" * int(pct / 5)
-        # Support check
-        is_stable = len(set([str(t.params.get(param)) for t in top_trials])) == 1 if len(top_trials) > 1 else False
-        support = "[bold green]STABLE[/bold green]" if is_stable else "[dim]SEARCHING[/dim]"
-        table.add_row(str(i), param, f"{pct:.2f}%", f"[magenta]{bar}[/magenta]", str(study.best_params.get(param)), support)
+        is_elite_param = param in top_params_list
+        prefix = "[bold magenta]ELITE[/bold magenta]" if is_elite_param else " "
+        
+        # Elite Group Consensus Check (Top 25% of Trials)
+        vals = [str(t.params.get(param)) for t in elite_trials]
+        is_stable = len(set(vals)) == 1
+        support = "[bold green]STABLE[/bold green]" if is_stable else "[dim]VARYING[/dim]"
+        
+        table.add_row(f"{i}", param, f"{pct:.2f}%", str(study.best_params.get(param)), f"{prefix} {support}")
 
     console.print(table)
 
-    # 6. Reasoning Section
+    # 7. Strategic Verdict / Reasoning
     reasoning = (
-        f"• [bold cyan]Target Adjustment:[/bold cyan] Your current target is set to [bold]{dynamic_target}[/bold] trials.\n"
-        f"• [bold cyan]Why?[/bold cyan] " + 
-        ("High volatility detected. We need more samples to ensure the Best Value isn't an outlier." if dynamic_multiplier == 10 else 
-         "The signal is stabilizing. We've reduced the target because the top parameters are consistent.") + "\n"
-        f"• [bold cyan]Convergence:[/bold cyan] You have [bold]{convergence_score}/3[/bold] top parameters locked in."
+        f"• [bold cyan]Target Adjustment:[/bold cyan] Expected stability at trial [bold]{dynamic_target}[/bold].\n"
+        f"• [bold cyan]Why?[/bold cyan] Volatility is [bold]{volatility:.2f}[/bold]. The target scales to filter parallel noise.\n"
+        f"• [bold cyan]Asymmetric Logic:[/bold cyan] Monitoring top 25% of params across the elite 25% trial cluster.\n"
+        f"• [bold cyan]Convergence:[/bold cyan] You have [bold]{convergence_count}/{n_top_params}[/bold] elite parameters locked in."
     )
     console.print(Panel(reasoning, title="Dynamic Reasoning", border_style="bright_white"))
 
