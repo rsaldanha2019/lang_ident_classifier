@@ -1,35 +1,66 @@
 import optuna
 import numpy as np
+import argparse
+import sys
 from optuna.importance import FanovaImportanceEvaluator
 from rich.console import Console
 from rich.table import Table
 from rich.panel import Panel
 
-STORAGE = "sqlite:///optim_studies/lang_ident_classifier_optim_ai4bharat/study.db"
-STUDY_NAME = "lang_ident_classifier_optim_ai4bharat"
+def get_hierarchy_map(study, completed_trials):
+    """
+    Detects nesting: If Param B only exists when Param A exists, B is a sub-parameter.
+    """
+    all_params = sorted(list(set().union(*(t.params.keys() for t in completed_trials))))
+    hierarchy = {p: "[dim]Global[/dim]" for p in all_params}
+    presence = {p: set(t.number for t in completed_trials if p in t.params) for p in all_params}
+    total_completed = len(completed_trials)
+
+    for child in all_params:
+        child_mask = presence[child]
+        if len(child_mask) == total_completed: continue
+        
+        for parent in all_params:
+            if child == parent: continue
+            parent_mask = presence[parent]
+            if child_mask.issubset(parent_mask) and len(parent_mask) > len(child_mask):
+                hierarchy[child] = f"Sub of [bold]{parent}[/bold]"
+                break
+    return hierarchy
 
 def main():
+    # 1. COMPULSORY COMMAND LINE ARGUMENTS
+    parser = argparse.ArgumentParser(description="Dynamic Driver Analysis")
+    parser.add_argument("--storage", required=True, help="Database URI (e.g., study.db)")
+    parser.add_argument("--study-name", required=True, help="Name of the Optuna study")
+    args = parser.parse_args()
+
     console = Console()
     try:
-        # 1. Load Study with fANOVA support
-        study = optuna.load_study(study_name=STUDY_NAME, storage=STORAGE)
+        # Load Study with fANOVA support
+        study = optuna.load_study(study_name=args.study_name, storage="sqlite:///"+args.storage)
     except Exception as e:
-        console.print(f"[red]Error:[/red] {e}"); return
+        console.print(f"[bold red]Error:[/bold red] {e}")
+        sys.exit(1)
 
     completed = [t for t in study.trials if t.state == optuna.trial.TrialState.COMPLETE]
     if not completed:
         console.print("[yellow]No completed trials found.[/yellow]"); return
 
-    # 2. Calculate Importance using fANOVA (Better for conditional/categorical)
-    # This addresses the 'Best Trial' basis by looking at variance drivers
+    # 2. CALCULATE IMPORTANCE (The Anchor for Synchronization)
     importance = optuna.importance.get_param_importances(
         study, 
         evaluator=FanovaImportanceEvaluator()
     )
     
-    table = Table(title="Dynamic Driver Analysis", header_style="bold yellow")
+    # Get hierarchy for the new column
+    hierarchy_map = get_hierarchy_map(study, completed)
+    
+    # 3. BUILD TABLE
+    table = Table(title="Dynamic Driver Analysis (Synchronized Rank)", header_style="bold yellow")
     table.add_column("Rank", justify="center")
     table.add_column("Hyperparameter", style="cyan")
+    table.add_column("Hierarchy", style="white") 
     table.add_column("Importance %", justify="right")
     table.add_column("Best Group Mean", justify="right", style="green")
     table.add_column("Worst Group Mean", justify="right", style="red")
@@ -37,7 +68,7 @@ def main():
 
     results_summary = []
 
-    # 3. Analyze Swings
+    # 4. ANALYZE SWINGS (Iterating through importance order)
     for i, (param, score) in enumerate(importance.items(), 1):
         param_values = {}
         for t in completed:
@@ -48,19 +79,20 @@ def main():
 
         if not param_values: continue
 
-        # Group stats: Determine which value of the parameter performed best vs worst
+        # Group stats
         cat_means = {k: np.mean(v) for k, v in param_values.items()}
         best_mean = max(cat_means.values())
         worst_mean = min(cat_means.values())
         delta = best_mean - worst_mean
 
-        # Dynamic bar scaling: normalization against max possible swing (1.0)
-        bar_len = int(delta * 35) # Adjusted for table width
+        # Dynamic bar scaling
+        bar_len = int(delta * 35) 
         bar = "█" * bar_len
         
         table.add_row(
             str(i), 
             param, 
+            hierarchy_map.get(param, "Global"),
             f"{score*100:.1f}%", 
             f"{best_mean:.4f}", 
             f"{worst_mean:.4f}", 
@@ -71,12 +103,10 @@ def main():
 
     console.print(table)
 
-    # 4. Dynamic Verdict Logic
-    # Filters based on fANOVA importance to identify the real movers
+    # 5. DYNAMIC VERDICT LOGIC
     top_3 = results_summary[:3]
     verdict_text = ""
     for item in top_3:
-        # Driver classification based on variance contribution
         if item['score'] > 0.20:
             impact_type = "Critical"
         elif item['score'] > 0.10:
@@ -86,7 +116,12 @@ def main():
             
         verdict_text += f"• [bold cyan]{item['name']}[/bold cyan]: {impact_type} driver ([bold]{item['score']*100:.1f}%[/bold] variance importance).\n"
 
-    # Fill if less than 3 drivers identified
+    # SENSITIVITY CHECK: Identify hidden volatility
+    if results_summary:
+        max_swing_param = max(results_summary, key=lambda x: x['delta'])
+        if max_swing_param['name'] not in [t['name'] for t in top_3]:
+            verdict_text += f"\n[yellow]Note:[/yellow] [bold cyan]{max_swing_param['name']}[/bold cyan] has the highest [bold]Impact Swing (+{max_swing_param['delta']:.4f})[/bold] despite lower overall importance."
+
     if not verdict_text:
         verdict_text = "• [yellow]Insufficient variance detected to isolate primary drivers.[/yellow]"
 
