@@ -38,7 +38,6 @@ run_config:
     - cross_entropy_loss  
     - class_weighted_cross_entropy_loss
     - focal_loss
-    - class_weighted_focal_loss
     - class_weighted_focal_loss_with_adaptive_focus_type1
     - class_weighted_focal_loss_with_adaptive_focus_type2
     - class_weighted_focal_loss_with_adaptive_focus_type3
