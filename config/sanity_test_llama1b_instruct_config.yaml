@@ -32,6 +32,8 @@ run_config:
   lora_rank: [4, 8, 12, 16]
   lora_scaling_factor: [4, 8, 12, 16]
   lora_dropout: [0.1, 0.2, 0.3]
+  alpha: [0.25, 0.5, 0.75, 0.8, 0.9]
+  gamma: [0.0, 0.5, 1.0, 2.0, 5.0]
   loss_type:
     - class_weighted_focal_loss_with_adaptive_focus_type1
     - class_weighted_focal_loss_with_adaptive_focus_type2
