@@ -31,7 +31,7 @@ def main():
     
     # Best Trial Summary
     best_trial = study.best_trial
-    console.print(f"\n[bold green]🏆 BEST TRIAL:[/bold green] #{best_trial.number}")
+    console.print(f"\n[bold green] BEST TRIAL:[/bold green] #{best_trial.number}")
     console.print(f"   [bold]Objective Value:[/bold] {best_trial.value}")
     
     param_table = Table(title="Winning Parameter Configuration", header_style="bold cyan")
@@ -42,7 +42,7 @@ def main():
     console.print(param_table)
 
     # fANOVA Importance (Handles Nested Params)
-    console.print("\n[bold yellow]🔍 Sensitivity Analysis (fANOVA):[/bold yellow]")
+    console.print("\n[bold yellow] Sensitivity Analysis (fANOVA):[/bold yellow]")
     try:
         importance = get_param_importances(study, evaluator=FanovaImportanceEvaluator())
         imp_table = Table(show_header=True)
@@ -60,7 +60,7 @@ def main():
         top_n = max(1, len(completed_trials) // 10)
         top_trials = sorted(completed_trials, key=lambda x: x.value)[:top_n]
         avg_top = sum(t.value for t in top_trials) / top_n
-        console.print(f"\n[bold blue]📊 Robustness:[/bold blue] Top 10% Mean: {avg_top:.4f} (Gap to best: {abs(best_trial.value - avg_top):.4f})")
+        console.print(f"\n[bold blue] Robustness:[/bold blue] Top 10% Mean: {avg_top:.4f} (Gap to best: {abs(best_trial.value - avg_top):.4f})")
 
     # --- VISUALIZATION EXPORT (Standard Plots) ---
     
