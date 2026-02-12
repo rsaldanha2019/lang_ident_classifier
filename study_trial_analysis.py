@@ -86,10 +86,25 @@ def main():
         vis.plot_slice(study).write_html(os.path.join(output_dir, "parameter_slices.html"))
         
         # Plot 3: Parallel Coordinate
-        vis.plot_parallel_coordinate(study).write_html(os.path.join(output_dir, "multidim_paths.html"))
+        # vis.plot_parallel_coordinate(study).write_html(os.path.join(output_dir, "multidim_paths.html"))
         
-        # Plot 4: Parameter Importance (Integrated here)
-        vis.plot_param_importances(study, evaluator=FanovaImportanceEvaluator()).write_html(os.path.join(output_dir, "param_importance.html"))
+        # Plot 3: Parallel Coordinate (Robust to Nested/Conditional Params)
+        try:
+            # Use the best trial as the template for which axes to show
+            best_params = list(study.best_trial.params.keys())
+            
+            # We use 'params' to force the plot to only look at keys 
+            # that exist in our successful best-performing branch
+            fig = vis.plot_parallel_coordinate(study, params=best_params)
+            fig.write_html(os.path.join(output_dir, "multidim_paths.html"))
+        except Exception as e:
+            console.print(f"[yellow]Parallel Plot Warning: {e}. Attempting limited plot...[/yellow]")
+            # Fallback: Just plot the first 3 parameters found in the study
+            all_keys = list(study.trials[0].params.keys()) if study.trials else []
+            vis.plot_parallel_coordinate(study, params=all_keys[:3]).write_html(...)
+            
+            # Plot 4: Parameter Importance (Integrated here)
+            vis.plot_param_importances(study, evaluator=FanovaImportanceEvaluator()).write_html(os.path.join(output_dir, "param_importance.html"))
         
         # Plot 5: Contour
         if len(best_trial.params) >= 2:
