@@ -16,7 +16,7 @@ app:
   strategy:
     "fsdp"
   num_trials:
-    100
+    500
 run_config:
   accumulate_grad_batches: 8
   training_precision_type: bf16-mixed
