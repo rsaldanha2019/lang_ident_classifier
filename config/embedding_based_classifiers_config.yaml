@@ -2,7 +2,7 @@ operation_mode:
   "model_hyperparameter_selection"
 app:
   model_config_name:
-    "lang_ident_classifier_optim_bert_family_classifiers"
+    "lang_ident_classifier_optim_embedding_based_classifiers"
   data_dir:
     "data"
   logs_dir:
