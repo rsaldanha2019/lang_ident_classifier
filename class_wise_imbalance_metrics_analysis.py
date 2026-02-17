@@ -5,11 +5,35 @@ import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 
 def parse_params(s):
-    # Standardizing the dictionary format from trial_metrics.csv
-    s = re.sub(r'(\w+):', r'"\1":', s)
-    s = re.sub(r':\s+([a-zA-Z_][a-zA-Z0-9_]*)', r': "\1"', s)
-    try: return ast.literal_eval(s)
-    except: return {}
+    if not isinstance(s, str) or ":" not in s:
+        return {}
+    
+    s = s.strip().strip("{}").replace('\n', '')
+    parts = re.split(r',(?![^\[]*\])', s)
+    
+    params = {}
+    for part in parts:
+        if ":" not in part:
+            continue
+            
+        k, v = part.split(":", 1)
+        k = k.strip().strip("'").strip('"')
+        v = v.strip().strip("'").strip('"')
+        
+        try:
+            if "." in v:
+                params[k] = float(v)
+            else:
+                params[k] = int(v)
+        except ValueError:
+            # --- NEW LOGIC START ---
+            # If the value contains '::', take only the part before it
+            if "::" in v:
+                v = v.split("::")[0]
+            # --- NEW LOGIC END ---
+            params[k] = v
+            
+    return params
 
 def generate_final_clinical_dashboard(root_path):
     # 1. Extract Study Name and Setup Directory
