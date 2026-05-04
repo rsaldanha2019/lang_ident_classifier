@@ -74,7 +74,7 @@ class ModelOpsApi:
                 strategy = property_validation(
                     props=props,
                     name="app.strategy",
-                    dtype=list[str],
+                    dtype=str,
                     required=False,
                     allowed_values=['auto','ddp','fsdp'],
                     default="auto",
@@ -225,7 +225,7 @@ class ModelOpsApi:
             api.run_app(args=parsed_args)
         except Exception as e:
             # This captures the 'Torch not compiled with CUDA enabled'
-            print(f"Fatal Exception: {e}")
+            print(f"Exception: {e}")
         finally:
             if torch.distributed.is_initialized():
                 try:
