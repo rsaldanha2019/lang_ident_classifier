@@ -87,7 +87,22 @@ class ModelOpsApi:
                 )
                 return f1
 
-        except (optuna.exceptions.TrialPruned, Exception) as e:
+        # except (optuna.exceptions.TrialPruned, Exception) as e:
+        #     if torch.distributed.is_initialized():
+        #         try:
+        #             torch.distributed.barrier()
+        #         except: pass
+            
+        #     clear_gpu_and_cpu_resources()
+            
+        #     if not torch.distributed.is_initialized() or torch.distributed.get_rank() == 0:
+        #         if trial and "test_accuracy" not in trial.user_attrs:
+        #             trial.set_user_attr("test_accuracy", 0.0)
+            
+        #     if isinstance(e, optuna.exceptions.TrialPruned):
+        #         raise e
+        #     raise e
+        except Exception as e:
             if torch.distributed.is_initialized():
                 try:
                     torch.distributed.barrier()
@@ -99,9 +114,11 @@ class ModelOpsApi:
                 if trial and "test_accuracy" not in trial.user_attrs:
                     trial.set_user_attr("test_accuracy", 0.0)
             
-            if isinstance(e, optuna.exceptions.TrialPruned):
+            if "CUDA out of memory" in str(e) or isinstance(e, (RuntimeError, torch.cuda.OutOfMemoryError)):
+                print(f"[OOM] Trial failed - continuing to next trial")
+                raise optuna.exceptions.TrialPruned()
+            else:
                 raise e
-            raise e
 
     def run_app(self, args) -> Any:
         global continue_optimization
@@ -171,13 +188,22 @@ class ModelOpsApi:
 
         # Optimization Loop
         while continue_optimization:
+            # if rank == 0:
+            #     if len(study.trials) >= n_trials:
+            #         break
+            #     study.optimize(
+            #         lambda t: ModelOpsApi.objective(t, args, continue_optimization, study),
+            #         n_trials=1, # Run one-by-one to check continue flag
+            #         callbacks=[log_results, clear_cb]
+            #     )
             if rank == 0:
                 if len(study.trials) >= n_trials:
                     break
                 study.optimize(
                     lambda t: ModelOpsApi.objective(t, args, continue_optimization, study),
-                    n_trials=1, # Run one-by-one to check continue flag
-                    callbacks=[log_results, clear_cb]
+                    n_trials=1,
+                    callbacks=[log_results, clear_cb],
+                    catch=(Exception, RuntimeError, torch.cuda.OutOfMemoryError)  # ← THIS LINE ADDED
                 )
             else:
                 # Workers just execute the objective
